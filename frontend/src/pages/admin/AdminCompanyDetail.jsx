@@ -4,11 +4,9 @@ import {
   adminChangeUserPassword,
   adminCreateUser,
   adminDeleteUser,
-  adminGetCalendarSettings,
   adminGetCompany,
   adminListAcms,
   adminListUsers,
-  adminUpdateCalendarSettings,
   adminUpdateCompany,
   adminUpdateUser,
 } from '../../adminApi.js'
@@ -212,104 +210,6 @@ function UsersSection({ companyId }) {
   )
 }
 
-function CalendarSettingsSection({ companyId }) {
-  const FIELDS = [
-    {
-      group: 'Google Calendar',
-      fields: [
-        { key: 'calendar_google_client_id', label: 'Client ID', type: 'text' },
-        { key: 'calendar_google_client_secret', label: 'Client Secret', type: 'password' },
-        { key: 'calendar_google_redirect_uri', label: 'Redirect URI', type: 'text', placeholder: 'https://tu-backend.com/api/agenda/integrations/google/callback' },
-      ],
-    },
-    {
-      group: 'Microsoft / Outlook',
-      fields: [
-        { key: 'calendar_microsoft_client_id', label: 'Client ID (Application ID)', type: 'text' },
-        { key: 'calendar_microsoft_client_secret', label: 'Client Secret', type: 'password' },
-        { key: 'calendar_microsoft_redirect_uri', label: 'Redirect URI', type: 'text', placeholder: 'https://tu-backend.com/api/agenda/integrations/microsoft/callback' },
-        { key: 'calendar_microsoft_tenant', label: 'Tenant ID', type: 'text', placeholder: 'common' },
-      ],
-    },
-  ]
-
-  const [form, setForm] = useState({})
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState(null)
-  const [success, setSuccess] = useState(false)
-
-  useEffect(() => {
-    setLoading(true)
-    adminGetCalendarSettings(companyId)
-      .then(setForm)
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false))
-  }, [companyId])
-
-  async function handleSave(e) {
-    e.preventDefault()
-    setSaving(true)
-    setError(null)
-    setSuccess(false)
-    try {
-      await adminUpdateCalendarSettings(companyId, form)
-      setSuccess(true)
-      setTimeout(() => setSuccess(false), 3000)
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  if (loading) return null
-
-  return (
-    <div className="admin-section">
-      <div className="admin-section-header">
-        <h2>Integraciones de Agenda</h2>
-      </div>
-      <p className="admin-muted" style={{ marginBottom: '1rem', maxWidth: 560 }}>
-        Configurá las credenciales OAuth para que los usuarios de esta empresa puedan sincronizar su agenda con Google Calendar y Microsoft Outlook. Si no se configuran, las opciones de conexión no aparecerán en la agenda del usuario.
-      </p>
-
-      {error && <InlineNotice tone="error" title="No se pudo guardar" description={error} className="notice--spaced" />}
-      {success && <InlineNotice tone="success" title="Credenciales guardadas" description="Los usuarios ya pueden conectar sus calendarios." className="notice--spaced" />}
-
-      <form onSubmit={handleSave}>
-        {FIELDS.map(({ group, fields }) => (
-          <div key={group} style={{ marginBottom: '1.5rem' }}>
-            <div className="admin-muted" style={{ fontWeight: 600, marginBottom: '0.625rem', fontSize: '0.8125rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-              {group}
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              {fields.map(({ key, label, type, placeholder }) => (
-                <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-                  <label style={{ width: 200, fontSize: '0.8125rem', color: '#374151', flexShrink: 0 }}>{label}</label>
-                  <input
-                    className="admin-input"
-                    type={type === 'password' ? 'text' : type}
-                    value={form[key] || ''}
-                    placeholder={placeholder || ''}
-                    onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
-                    style={{ width: 320 }}
-                    autoComplete="off"
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
-
-        <button type="submit" className="admin-btn admin-btn--primary admin-btn--sm" disabled={saving}>
-          {saving ? 'Guardando...' : 'Guardar credenciales'}
-        </button>
-      </form>
-    </div>
-  )
-}
-
 function AcmsSection({ companyId }) {
   const [acms, setAcms] = useState([])
   const [loading, setLoading] = useState(true)
@@ -453,7 +353,6 @@ export default function AdminCompanyDetail() {
       {error && <InlineNotice tone="error" title="No pudimos actualizar la empresa" description={error} className="notice--spaced" />}
 
       <UsersSection companyId={companyId} />
-      <CalendarSettingsSection companyId={companyId} />
       <AcmsSection companyId={companyId} />
     </div>
   )

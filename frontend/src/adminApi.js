@@ -56,11 +56,6 @@ export const adminChangeUserPassword = (companyId, userId, newPassword) =>
 
 export const adminListAcms = (companyId) => adminRequest('GET', `/api/admin/companies/${companyId}/acms`)
 
-export const adminGetCalendarSettings = (companyId) =>
-  adminRequest('GET', `/api/admin/companies/${companyId}/calendar-settings`)
-export const adminUpdateCalendarSettings = (companyId, data) =>
-  adminRequest('PUT', `/api/admin/companies/${companyId}/calendar-settings`, data)
-
 export const adminGetIntegrationSettings = () => adminRequest('GET', '/api/admin/settings/integrations')
 export const adminUpdateIntegrationSettings = (data) => adminRequest('PUT', '/api/admin/settings/integrations', data)
 export const adminCheckIntegrationStatus = () => adminRequest('GET', '/api/admin/settings/integrations/status')

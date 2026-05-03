@@ -6,14 +6,11 @@ import {
   deleteEvent,
   deleteIcalFeed,
   disconnectGoogle,
-  disconnectMicrosoft,
   getAvailableIntegrations,
   getGoogleAuthUrl,
-  getMicrosoftAuthUrl,
   listEvents,
   listIntegrations,
   syncGoogle,
-  syncMicrosoft,
   updateEvent,
 } from '../api.js'
 import { LoadingState, StateCard } from '../components/StatusState.jsx'
@@ -257,21 +254,9 @@ function IntegrationsPanel({ integrations, available, onRefresh }) {
     })
   }
 
-  async function handleMicrosoftConnect() {
-    await act('microsoft-connect', async () => {
-      const data = await getMicrosoftAuthUrl()
-      window.location.href = data.url
-    })
-  }
-
   async function handleGoogleSync() {
     const result = await act('google-sync', syncGoogle)
     if (result) setSyncResult(`Google: ${result.pushed} enviados, ${result.pulled} importados`)
-  }
-
-  async function handleMicrosoftSync() {
-    const result = await act('microsoft-sync', syncMicrosoft)
-    if (result) setSyncResult(`Microsoft: ${result.pushed} enviados, ${result.pulled} importados`)
   }
 
   async function handleIcalCreate() {
@@ -286,12 +271,7 @@ function IntegrationsPanel({ integrations, available, onRefresh }) {
     await act('google-disconnect', disconnectGoogle)
   }
 
-  async function handleMicrosoftDisconnect() {
-    await act('microsoft-disconnect', disconnectMicrosoft)
-  }
-
   const googleConnected = Boolean(integrations?.google?.connected)
-  const microsoftConnected = Boolean(integrations?.microsoft?.connected)
   const icalConnected = Boolean(integrations?.ical?.connected)
   const icalToken = integrations?.ical?.token
   const icalFeedUrl = icalToken ? `${API_BASE}/api/agenda/ical/${icalToken}` : null
@@ -349,53 +329,6 @@ function IntegrationsPanel({ integrations, available, onRefresh }) {
           </div>
         )}
 
-        {/* Microsoft Calendar — solo si la empresa lo tiene configurado */}
-        {(available?.microsoft || microsoftConnected) && (
-          <div className="agenda-integration-card">
-            <div className="agenda-integration-card__icon agenda-integration-card__icon--microsoft">M</div>
-            <div className="agenda-integration-card__body">
-              <strong>Microsoft / Outlook</strong>
-              <span>{microsoftConnected ? 'Conectado — tu cuenta de Microsoft sincronizada' : 'No conectado'}</span>
-            </div>
-            <div className="agenda-integration-card__actions">
-              {microsoftConnected ? (
-                <>
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-sm"
-                    onClick={handleMicrosoftSync}
-                    disabled={Boolean(loadingAction)}
-                  >
-                    {loadingAction === 'microsoft-sync' ? 'Sincronizando...' : 'Sincronizar ahora'}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-sm"
-                    onClick={handleMicrosoftDisconnect}
-                    disabled={Boolean(loadingAction)}
-                  >
-                    Desconectar
-                  </button>
-                </>
-              ) : (
-                <button
-                  type="button"
-                  className="btn btn-primary btn-sm"
-                  onClick={handleMicrosoftConnect}
-                  disabled={Boolean(loadingAction)}
-                >
-                  {loadingAction === 'microsoft-connect' ? 'Redirigiendo...' : 'Conectar con Microsoft'}
-                </button>
-              )}
-            </div>
-          </div>
-        )}
-
-        {!available?.google && !available?.microsoft && !googleConnected && !microsoftConnected && (
-          <p className="admin-muted" style={{ fontSize: '0.8125rem', padding: '0.25rem 0' }}>
-            El administrador no tiene configuradas integraciones de calendario para esta empresa.
-          </p>
-        )}
 
         {/* Apple iCal */}
         <div className="agenda-integration-card">
@@ -639,7 +572,7 @@ export default function Agenda() {
 
   const [events, setEvents] = useState([])
   const [integrations, setIntegrations] = useState({})
-  const [available, setAvailable] = useState({ google: false, microsoft: false })
+  const [available, setAvailable] = useState({ google: false })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -768,9 +701,8 @@ export default function Agenda() {
   }
 
   const googleConnected = Boolean(integrations?.google?.connected)
-  const microsoftConnected = Boolean(integrations?.microsoft?.connected)
-  const anyConnected = googleConnected || microsoftConnected || Boolean(integrations?.ical?.connected)
-  const anyAvailable = available?.google || available?.microsoft || anyConnected
+  const anyConnected = googleConnected || Boolean(integrations?.ical?.connected)
+  const anyAvailable = available?.google || anyConnected
 
   const periodLabel = viewMode === 'week'
     ? `${weekStart.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })} – ${new Date(weekStart.getTime() + 6 * 86400000).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}`
@@ -821,7 +753,7 @@ export default function Agenda() {
 
       {connectedProvider && (
         <div className="alert alert-success" style={{ marginBottom: '1rem' }}>
-          {connectedProvider === 'google' ? 'Google Calendar' : 'Microsoft Calendar'} conectado correctamente.
+          Google Calendar conectado correctamente.
         </div>
       )}
 

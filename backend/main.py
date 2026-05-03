@@ -1238,67 +1238,6 @@ def admin_list_company_acms(company_id: int, request: Request, db: Session = Dep
     return result
 
 
-# ── Admin calendar credentials per company ────────────────────────────────────
-
-_CAL_KEYS = [
-    "calendar_google_client_id",
-    "calendar_google_client_secret",
-    "calendar_google_redirect_uri",
-    "calendar_microsoft_client_id",
-    "calendar_microsoft_client_secret",
-    "calendar_microsoft_redirect_uri",
-    "calendar_microsoft_tenant",
-]
-_CAL_SECRET_KEYS = {"calendar_google_client_secret", "calendar_microsoft_client_secret"}
-
-
-class CompanyCalendarSettings(PydanticBase):
-    calendar_google_client_id: Optional[str] = None
-    calendar_google_client_secret: Optional[str] = None
-    calendar_google_redirect_uri: Optional[str] = None
-    calendar_microsoft_client_id: Optional[str] = None
-    calendar_microsoft_client_secret: Optional[str] = None
-    calendar_microsoft_redirect_uri: Optional[str] = None
-    calendar_microsoft_tenant: Optional[str] = None
-
-
-@app.get("/api/admin/companies/{company_id}/calendar-settings")
-def admin_get_calendar_settings(company_id: int, request: Request, db: Session = Depends(get_db)):
-    _require_superadmin(request, db)
-    if not db.query(Company).filter(Company.id == company_id).first():
-        raise HTTPException(404, "Empresa no encontrada")
-    result = {}
-    for key in _CAL_KEYS:
-        val = _get_company_setting(db, company_id, key)
-        if val and key in _CAL_SECRET_KEYS:
-            result[key] = "***"
-        else:
-            result[key] = val or ""
-    return result
-
-
-@app.put("/api/admin/companies/{company_id}/calendar-settings")
-def admin_update_calendar_settings(
-    company_id: int,
-    body: CompanyCalendarSettings,
-    request: Request,
-    db: Session = Depends(get_db),
-):
-    _require_superadmin(request, db)
-    if not db.query(Company).filter(Company.id == company_id).first():
-        raise HTTPException(404, "Empresa no encontrada")
-    data = body.model_dump()
-    for key in _CAL_KEYS:
-        val = data.get(key)
-        if val is None:
-            continue
-        if key in _CAL_SECRET_KEYS and val == "***":
-            continue  # keep existing secret
-        _save_company_setting(db, company_id, key, val.strip())
-    db.commit()
-    return admin_get_calendar_settings(company_id, request, db)
-
-
 # ── Admin integration settings ────────────────────────────────────────────────
 
 class GlobalIntegrationSettings(PydanticBase):
@@ -1634,23 +1573,13 @@ from fastapi import Query
 from fastapi.responses import Response as FastAPIResponse
 
 _GOOGLE_SCOPES = "https://www.googleapis.com/auth/calendar"
-_MICROSOFT_SCOPES = "Calendars.ReadWrite offline_access"
 _FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 _DEFAULT_BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 
 
-def _company_cal_cfg(db: Session, company_id: int) -> dict:
-    """Return calendar OAuth config for a company from CompanySetting."""
-    def g(key): return (_get_company_setting(db, company_id, key) or "").strip()
-    return {
-        "google_client_id": g("calendar_google_client_id"),
-        "google_client_secret": g("calendar_google_client_secret"),
-        "google_redirect_uri": g("calendar_google_redirect_uri") or f"{_DEFAULT_BACKEND_URL}/api/agenda/integrations/google/callback",
-        "microsoft_client_id": g("calendar_microsoft_client_id"),
-        "microsoft_client_secret": g("calendar_microsoft_client_secret"),
-        "microsoft_redirect_uri": g("calendar_microsoft_redirect_uri") or f"{_DEFAULT_BACKEND_URL}/api/agenda/integrations/microsoft/callback",
-        "microsoft_tenant": g("calendar_microsoft_tenant") or "common",
-    }
+_GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+_GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
+_GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", "") or f"{_DEFAULT_BACKEND_URL}/api/agenda/integrations/google/callback"
 
 
 def _serialize_event(event: CalendarEvent) -> dict:
@@ -1890,25 +1819,22 @@ def delete_ical_feed(request: Request, db: Session = Depends(get_db)):
 
 @app.get("/api/agenda/integrations/available")
 def integrations_available(request: Request, db: Session = Depends(get_db)):
-    user = _current_user(request, db)
-    cfg = _company_cal_cfg(db, user.company_id) if user.company_id else {}
+    _current_user(request, db)
     return {
-        "google": bool(cfg.get("google_client_id") and cfg.get("google_client_secret")),
-        "microsoft": bool(cfg.get("microsoft_client_id") and cfg.get("microsoft_client_secret")),
+        "google": bool(_GOOGLE_CLIENT_ID and _GOOGLE_CLIENT_SECRET),
     }
 
 
 @app.get("/api/agenda/integrations/google/auth")
 def google_auth_url(request: Request, db: Session = Depends(get_db)):
     user = _current_user(request, db)
-    cfg = _company_cal_cfg(db, user.company_id) if user.company_id else {}
-    if not cfg.get("google_client_id") or not cfg.get("google_client_secret"):
-        raise HTTPException(501, "Google Calendar no está configurado para esta empresa")
+    if not _GOOGLE_CLIENT_ID or not _GOOGLE_CLIENT_SECRET:
+        raise HTTPException(501, "Google Calendar no está configurado")
     state = _create_token(user.username)
     from urllib.parse import urlencode
     params = {
-        "client_id": cfg["google_client_id"],
-        "redirect_uri": cfg["google_redirect_uri"],
+        "client_id": _GOOGLE_CLIENT_ID,
+        "redirect_uri": _GOOGLE_REDIRECT_URI,
         "response_type": "code",
         "scope": _GOOGLE_SCOPES,
         "access_type": "offline",
@@ -1929,13 +1855,12 @@ async def google_callback(code: str, state: str, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(400, "Usuario no encontrado")
 
-    cfg = _company_cal_cfg(db, user.company_id) if user.company_id else {}
     async with httpx.AsyncClient() as client:
         resp = await client.post("https://oauth2.googleapis.com/token", data={
             "code": code,
-            "client_id": cfg.get("google_client_id", ""),
-            "client_secret": cfg.get("google_client_secret", ""),
-            "redirect_uri": cfg.get("google_redirect_uri", ""),
+            "client_id": _GOOGLE_CLIENT_ID,
+            "client_secret": _GOOGLE_CLIENT_SECRET,
+            "redirect_uri": _GOOGLE_REDIRECT_URI,
             "grant_type": "authorization_code",
         })
     if not resp.is_success:
@@ -1983,12 +1908,10 @@ async def google_callback(code: str, state: str, db: Session = Depends(get_db)):
 async def _refresh_google_token(intg: UserCalendarIntegration, db: Session) -> Optional[str]:
     if not intg.refresh_token:
         return None
-    user = db.query(User).filter(User.id == intg.user_id).first()
-    cfg = _company_cal_cfg(db, user.company_id) if user and user.company_id else {}
     async with httpx.AsyncClient() as client:
         resp = await client.post("https://oauth2.googleapis.com/token", data={
-            "client_id": cfg.get("google_client_id", ""),
-            "client_secret": cfg.get("google_client_secret", ""),
+            "client_id": _GOOGLE_CLIENT_ID,
+            "client_secret": _GOOGLE_CLIENT_SECRET,
             "refresh_token": intg.refresh_token,
             "grant_type": "refresh_token",
         })
@@ -2110,212 +2033,4 @@ def google_disconnect(request: Request, db: Session = Depends(get_db)):
         db.commit()
 
 
-# ── Microsoft OAuth ────────────────────────────────────────────────────────────
-
-@app.get("/api/agenda/integrations/microsoft/auth")
-def microsoft_auth_url(request: Request, db: Session = Depends(get_db)):
-    user = _current_user(request, db)
-    cfg = _company_cal_cfg(db, user.company_id) if user.company_id else {}
-    if not cfg.get("microsoft_client_id") or not cfg.get("microsoft_client_secret"):
-        raise HTTPException(501, "Microsoft Calendar no está configurado para esta empresa")
-    state = _create_token(user.username)
-    from urllib.parse import urlencode
-    params = {
-        "client_id": cfg["microsoft_client_id"],
-        "response_type": "code",
-        "redirect_uri": cfg["microsoft_redirect_uri"],
-        "scope": _MICROSOFT_SCOPES,
-        "state": state,
-        "response_mode": "query",
-    }
-    tenant = cfg["microsoft_tenant"]
-    url = f"https://login.microsoftonline.com/{tenant}/oauth2/v2.0/authorize?" + urlencode(params)
-    return {"url": url}
-
-
-@app.get("/api/agenda/integrations/microsoft/callback")
-async def microsoft_callback(code: str, state: str, db: Session = Depends(get_db)):
-    try:
-        username = _decode_token(state)
-    except Exception:
-        raise HTTPException(400, "Estado OAuth inválido")
-    user = db.query(User).filter(User.username == username).first()
-    if not user:
-        raise HTTPException(400, "Usuario no encontrado")
-
-    cfg = _company_cal_cfg(db, user.company_id) if user.company_id else {}
-    tenant = cfg.get("microsoft_tenant", "common")
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(
-            f"https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token",
-            data={
-                "client_id": cfg.get("microsoft_client_id", ""),
-                "client_secret": cfg.get("microsoft_client_secret", ""),
-                "code": code,
-                "redirect_uri": cfg.get("microsoft_redirect_uri", ""),
-                "grant_type": "authorization_code",
-            },
-        )
-    if not resp.is_success:
-        raise HTTPException(400, "No se pudo obtener el token de Microsoft")
-    token_data = resp.json()
-
-    expiry = None
-    if "expires_in" in token_data:
-        expiry = datetime.utcnow() + timedelta(seconds=token_data["expires_in"])
-
-    existing = db.query(UserCalendarIntegration).filter(
-        UserCalendarIntegration.user_id == user.id,
-        UserCalendarIntegration.provider == "microsoft",
-    ).first()
-    if existing:
-        existing.access_token = token_data.get("access_token")
-        existing.refresh_token = token_data.get("refresh_token") or existing.refresh_token
-        existing.token_expiry = expiry
-        existing.is_active = True
-        existing.updated_at = datetime.utcnow()
-    else:
-        db.add(UserCalendarIntegration(
-            user_id=user.id,
-            provider="microsoft",
-            access_token=token_data.get("access_token"),
-            refresh_token=token_data.get("refresh_token"),
-            token_expiry=expiry,
-            is_active=True,
-        ))
-    db.commit()
-
-    from starlette.responses import RedirectResponse
-    return RedirectResponse(f"{_FRONTEND_URL}/agenda?connected=microsoft")
-
-
-async def _refresh_microsoft_token(intg: UserCalendarIntegration, db: Session) -> Optional[str]:
-    if not intg.refresh_token:
-        return None
-    user = db.query(User).filter(User.id == intg.user_id).first()
-    cfg = _company_cal_cfg(db, user.company_id) if user and user.company_id else {}
-    tenant = cfg.get("microsoft_tenant", "common")
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(
-            f"https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token",
-            data={
-                "client_id": cfg.get("microsoft_client_id", ""),
-                "client_secret": cfg.get("microsoft_client_secret", ""),
-                "refresh_token": intg.refresh_token,
-                "grant_type": "refresh_token",
-            },
-        )
-    if not resp.is_success:
-        return None
-    data = resp.json()
-    intg.access_token = data["access_token"]
-    intg.token_expiry = datetime.utcnow() + timedelta(seconds=data.get("expires_in", 3600))
-    intg.updated_at = datetime.utcnow()
-    db.commit()
-    return intg.access_token
-
-
-async def _microsoft_access_token(intg: UserCalendarIntegration, db: Session) -> Optional[str]:
-    if intg.token_expiry and intg.token_expiry <= datetime.utcnow() + timedelta(minutes=5):
-        return await _refresh_microsoft_token(intg, db)
-    return intg.access_token
-
-
-@app.post("/api/agenda/integrations/microsoft/sync")
-async def microsoft_sync(request: Request, db: Session = Depends(get_db)):
-    user = _current_user(request, db)
-    intg = db.query(UserCalendarIntegration).filter(
-        UserCalendarIntegration.user_id == user.id,
-        UserCalendarIntegration.provider == "microsoft",
-        UserCalendarIntegration.is_active.is_(True),
-    ).first()
-    if not intg:
-        raise HTTPException(400, "Microsoft Calendar no está conectado")
-
-    token = await _microsoft_access_token(intg, db)
-    if not token:
-        raise HTTPException(400, "No se pudo renovar el token de Microsoft. Reconectá la integración.")
-
-    pushed = 0
-    pulled = 0
-
-    local_events = db.query(CalendarEvent).filter(
-        CalendarEvent.company_id == user.company_id,
-        CalendarEvent.owner_id == user.id,
-        CalendarEvent.deleted_at.is_(None),
-        CalendarEvent.microsoft_event_id.is_(None),
-    ).all()
-
-    async with httpx.AsyncClient() as client:
-        for evt in local_events:
-            body = {
-                "subject": evt.title,
-                "body": {"contentType": "text", "content": evt.description or ""},
-                "location": {"displayName": evt.location or ""},
-                "start": {"dateTime": evt.start_datetime.isoformat(), "timeZone": "UTC"},
-                "end": {"dateTime": evt.end_datetime.isoformat(), "timeZone": "UTC"},
-                "isAllDay": evt.all_day,
-            }
-            r = await client.post(
-                "https://graph.microsoft.com/v1.0/me/events",
-                json=body,
-                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-            )
-            if r.is_success:
-                evt.microsoft_event_id = r.json().get("id")
-                pushed += 1
-
-        now_str = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
-        r = await client.get(
-            "https://graph.microsoft.com/v1.0/me/calendarView",
-            params={"startDateTime": now_str, "endDateTime": "2099-01-01T00:00:00Z", "$top": 250},
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        if r.is_success:
-            for m_evt in r.json().get("value", []):
-                m_id = m_evt.get("id")
-                if not m_id:
-                    continue
-                if db.query(CalendarEvent).filter(CalendarEvent.microsoft_event_id == m_id).first():
-                    continue
-                try:
-                    start_dt = datetime.fromisoformat(m_evt["start"]["dateTime"].rstrip("Z"))
-                    end_dt = datetime.fromisoformat(m_evt["end"]["dateTime"].rstrip("Z"))
-                except Exception:
-                    continue
-                new_evt = CalendarEvent(
-                    title=m_evt.get("subject") or "(sin título)",
-                    description=m_evt.get("body", {}).get("content"),
-                    location=m_evt.get("location", {}).get("displayName"),
-                    start_datetime=start_dt,
-                    end_datetime=end_dt,
-                    all_day=m_evt.get("isAllDay", False),
-                    microsoft_event_id=m_id,
-                    owner_id=user.id,
-                    company_id=user.company_id,
-                )
-                db.add(new_evt)
-                pulled += 1
-
-    db.commit()
-    return {"pushed": pushed, "pulled": pulled}
-
-
-@app.delete("/api/agenda/integrations/microsoft", status_code=204)
-def microsoft_disconnect(request: Request, db: Session = Depends(get_db)):
-    user = _current_user(request, db)
-    intg = db.query(UserCalendarIntegration).filter(
-        UserCalendarIntegration.user_id == user.id,
-        UserCalendarIntegration.provider == "microsoft",
-    ).first()
-    if intg:
-        intg.is_active = False
-        intg.access_token = None
-        intg.refresh_token = None
-        db.commit()
-
-
-def _push_event_to_external(db: Session, user: User, event: CalendarEvent):
-    """Fire-and-forget stub; actual push is async — skipped in sync context."""
-    pass
 
