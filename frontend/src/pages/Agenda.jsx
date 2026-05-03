@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import React, { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   createEvent,
   createIcalFeed,
@@ -7,6 +7,7 @@ import {
   deleteIcalFeed,
   disconnectGoogle,
   disconnectMicrosoft,
+  getAvailableIntegrations,
   getGoogleAuthUrl,
   getMicrosoftAuthUrl,
   listEvents,
@@ -15,7 +16,6 @@ import {
   syncMicrosoft,
   updateEvent,
 } from '../api.js'
-import { useAuth } from '../App.jsx'
 import { LoadingState, StateCard } from '../components/StatusState.jsx'
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -47,12 +47,6 @@ function fmtDateInput(dt) {
   const d = new Date(dt)
   const pad = (n) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
-
-function fmtDateDisplay(iso) {
-  if (!iso) return ''
-  const d = new Date(iso)
-  return d.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
 function fmtTimeDisplay(iso) {
@@ -235,7 +229,7 @@ function EventModal({ mode, event, onSave, onDelete, onClose, saving, deleting }
 
 // ── Integrations Panel ─────────────────────────────────────────────────────
 
-function IntegrationsPanel({ integrations, onRefresh }) {
+function IntegrationsPanel({ integrations, available, onRefresh }) {
   const [loadingAction, setLoadingAction] = useState(null)
   const [error, setError] = useState(null)
   const [syncResult, setSyncResult] = useState(null)
@@ -313,85 +307,95 @@ function IntegrationsPanel({ integrations, onRefresh }) {
       {syncResult && <div className="alert alert-success" style={{ marginBottom: '1rem' }}>{syncResult}</div>}
 
       <div className="agenda-integrations__list">
-        {/* Google Calendar */}
-        <div className="agenda-integration-card">
-          <div className="agenda-integration-card__icon agenda-integration-card__icon--google">G</div>
-          <div className="agenda-integration-card__body">
-            <strong>Google Calendar</strong>
-            <span>{googleConnected ? 'Conectado' : 'No conectado'}</span>
-          </div>
-          <div className="agenda-integration-card__actions">
-            {googleConnected ? (
-              <>
+        {/* Google Calendar — solo si la empresa lo tiene configurado */}
+        {(available?.google || googleConnected) && (
+          <div className="agenda-integration-card">
+            <div className="agenda-integration-card__icon agenda-integration-card__icon--google">G</div>
+            <div className="agenda-integration-card__body">
+              <strong>Google Calendar</strong>
+              <span>{googleConnected ? 'Conectado — tu cuenta de Google sincronizada' : 'No conectado'}</span>
+            </div>
+            <div className="agenda-integration-card__actions">
+              {googleConnected ? (
+                <>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={handleGoogleSync}
+                    disabled={Boolean(loadingAction)}
+                  >
+                    {loadingAction === 'google-sync' ? 'Sincronizando...' : 'Sincronizar ahora'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={handleGoogleDisconnect}
+                    disabled={Boolean(loadingAction)}
+                  >
+                    Desconectar
+                  </button>
+                </>
+              ) : (
                 <button
                   type="button"
-                  className="btn btn-secondary btn-sm"
-                  onClick={handleGoogleSync}
+                  className="btn btn-primary btn-sm"
+                  onClick={handleGoogleConnect}
                   disabled={Boolean(loadingAction)}
                 >
-                  {loadingAction === 'google-sync' ? 'Sincronizando...' : 'Sincronizar'}
+                  {loadingAction === 'google-connect' ? 'Redirigiendo...' : 'Conectar con Google'}
                 </button>
-                <button
-                  type="button"
-                  className="btn btn-secondary btn-sm"
-                  onClick={handleGoogleDisconnect}
-                  disabled={Boolean(loadingAction)}
-                >
-                  Desconectar
-                </button>
-              </>
-            ) : (
-              <button
-                type="button"
-                className="btn btn-primary btn-sm"
-                onClick={handleGoogleConnect}
-                disabled={Boolean(loadingAction)}
-              >
-                {loadingAction === 'google-connect' ? 'Redirigiendo...' : 'Conectar'}
-              </button>
-            )}
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* Microsoft Calendar */}
-        <div className="agenda-integration-card">
-          <div className="agenda-integration-card__icon agenda-integration-card__icon--microsoft">M</div>
-          <div className="agenda-integration-card__body">
-            <strong>Microsoft / Outlook</strong>
-            <span>{microsoftConnected ? 'Conectado' : 'No conectado'}</span>
-          </div>
-          <div className="agenda-integration-card__actions">
-            {microsoftConnected ? (
-              <>
+        {/* Microsoft Calendar — solo si la empresa lo tiene configurado */}
+        {(available?.microsoft || microsoftConnected) && (
+          <div className="agenda-integration-card">
+            <div className="agenda-integration-card__icon agenda-integration-card__icon--microsoft">M</div>
+            <div className="agenda-integration-card__body">
+              <strong>Microsoft / Outlook</strong>
+              <span>{microsoftConnected ? 'Conectado — tu cuenta de Microsoft sincronizada' : 'No conectado'}</span>
+            </div>
+            <div className="agenda-integration-card__actions">
+              {microsoftConnected ? (
+                <>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={handleMicrosoftSync}
+                    disabled={Boolean(loadingAction)}
+                  >
+                    {loadingAction === 'microsoft-sync' ? 'Sincronizando...' : 'Sincronizar ahora'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={handleMicrosoftDisconnect}
+                    disabled={Boolean(loadingAction)}
+                  >
+                    Desconectar
+                  </button>
+                </>
+              ) : (
                 <button
                   type="button"
-                  className="btn btn-secondary btn-sm"
-                  onClick={handleMicrosoftSync}
+                  className="btn btn-primary btn-sm"
+                  onClick={handleMicrosoftConnect}
                   disabled={Boolean(loadingAction)}
                 >
-                  {loadingAction === 'microsoft-sync' ? 'Sincronizando...' : 'Sincronizar'}
+                  {loadingAction === 'microsoft-connect' ? 'Redirigiendo...' : 'Conectar con Microsoft'}
                 </button>
-                <button
-                  type="button"
-                  className="btn btn-secondary btn-sm"
-                  onClick={handleMicrosoftDisconnect}
-                  disabled={Boolean(loadingAction)}
-                >
-                  Desconectar
-                </button>
-              </>
-            ) : (
-              <button
-                type="button"
-                className="btn btn-primary btn-sm"
-                onClick={handleMicrosoftConnect}
-                disabled={Boolean(loadingAction)}
-              >
-                {loadingAction === 'microsoft-connect' ? 'Redirigiendo...' : 'Conectar'}
-              </button>
-            )}
+              )}
+            </div>
           </div>
-        </div>
+        )}
+
+        {!available?.google && !available?.microsoft && !googleConnected && !microsoftConnected && (
+          <p className="admin-muted" style={{ fontSize: '0.8125rem', padding: '0.25rem 0' }}>
+            El administrador no tiene configuradas integraciones de calendario para esta empresa.
+          </p>
+        )}
 
         {/* Apple iCal */}
         <div className="agenda-integration-card">
@@ -621,8 +625,6 @@ function ListView({ events, onEventClick }) {
 // ── Main Page ──────────────────────────────────────────────────────────────
 
 export default function Agenda() {
-  const { user } = useAuth()
-  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
 
   const today = new Date()
@@ -637,6 +639,7 @@ export default function Agenda() {
 
   const [events, setEvents] = useState([])
   const [integrations, setIntegrations] = useState({})
+  const [available, setAvailable] = useState({ google: false, microsoft: false })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -668,8 +671,9 @@ export default function Agenda() {
 
   async function loadIntegrations() {
     try {
-      const data = await listIntegrations()
+      const [data, avail] = await Promise.all([listIntegrations(), getAvailableIntegrations()])
       setIntegrations(data)
+      setAvailable(avail)
     } catch {
       // integrations are optional
     }
@@ -766,6 +770,7 @@ export default function Agenda() {
   const googleConnected = Boolean(integrations?.google?.connected)
   const microsoftConnected = Boolean(integrations?.microsoft?.connected)
   const anyConnected = googleConnected || microsoftConnected || Boolean(integrations?.ical?.connected)
+  const anyAvailable = available?.google || available?.microsoft || anyConnected
 
   const periodLabel = viewMode === 'week'
     ? `${weekStart.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })} – ${new Date(weekStart.getTime() + 6 * 86400000).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}`
@@ -791,13 +796,15 @@ export default function Agenda() {
           <h1>Agenda</h1>
         </div>
         <div className="agenda-page__header-actions">
-          <button
-            type="button"
-            className={`btn btn-secondary btn-sm${anyConnected ? ' agenda-sync-badge' : ''}`}
-            onClick={() => setShowIntegrations((v) => !v)}
-          >
-            Integraciones {anyConnected ? '·' : ''}
-          </button>
+          {anyAvailable && (
+            <button
+              type="button"
+              className={`btn btn-secondary btn-sm${anyConnected ? ' agenda-sync-badge' : ''}`}
+              onClick={() => setShowIntegrations((v) => !v)}
+            >
+              Integraciones {anyConnected ? '·' : ''}
+            </button>
+          )}
           <button
             type="button"
             className="btn btn-primary"
@@ -820,7 +827,7 @@ export default function Agenda() {
 
       {/* Integrations Panel */}
       {showIntegrations && (
-        <IntegrationsPanel integrations={integrations} onRefresh={handleIntegrationsRefresh} />
+        <IntegrationsPanel integrations={integrations} available={available} onRefresh={handleIntegrationsRefresh} />
       )}
 
       {/* Calendar Controls */}

@@ -1238,6 +1238,67 @@ def admin_list_company_acms(company_id: int, request: Request, db: Session = Dep
     return result
 
 
+# ── Admin calendar credentials per company ────────────────────────────────────
+
+_CAL_KEYS = [
+    "calendar_google_client_id",
+    "calendar_google_client_secret",
+    "calendar_google_redirect_uri",
+    "calendar_microsoft_client_id",
+    "calendar_microsoft_client_secret",
+    "calendar_microsoft_redirect_uri",
+    "calendar_microsoft_tenant",
+]
+_CAL_SECRET_KEYS = {"calendar_google_client_secret", "calendar_microsoft_client_secret"}
+
+
+class CompanyCalendarSettings(PydanticBase):
+    calendar_google_client_id: Optional[str] = None
+    calendar_google_client_secret: Optional[str] = None
+    calendar_google_redirect_uri: Optional[str] = None
+    calendar_microsoft_client_id: Optional[str] = None
+    calendar_microsoft_client_secret: Optional[str] = None
+    calendar_microsoft_redirect_uri: Optional[str] = None
+    calendar_microsoft_tenant: Optional[str] = None
+
+
+@app.get("/api/admin/companies/{company_id}/calendar-settings")
+def admin_get_calendar_settings(company_id: int, request: Request, db: Session = Depends(get_db)):
+    _require_superadmin(request, db)
+    if not db.query(Company).filter(Company.id == company_id).first():
+        raise HTTPException(404, "Empresa no encontrada")
+    result = {}
+    for key in _CAL_KEYS:
+        val = _get_company_setting(db, company_id, key)
+        if val and key in _CAL_SECRET_KEYS:
+            result[key] = "***"
+        else:
+            result[key] = val or ""
+    return result
+
+
+@app.put("/api/admin/companies/{company_id}/calendar-settings")
+def admin_update_calendar_settings(
+    company_id: int,
+    body: CompanyCalendarSettings,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    _require_superadmin(request, db)
+    if not db.query(Company).filter(Company.id == company_id).first():
+        raise HTTPException(404, "Empresa no encontrada")
+    data = body.model_dump()
+    for key in _CAL_KEYS:
+        val = data.get(key)
+        if val is None:
+            continue
+        if key in _CAL_SECRET_KEYS and val == "***":
+            continue  # keep existing secret
+        _save_company_setting(db, company_id, key, val.strip())
+    db.commit()
+    return admin_get_calendar_settings(company_id, request, db)
+
+
 # ── Admin integration settings ────────────────────────────────────────────────
 
 class GlobalIntegrationSettings(PydanticBase):
@@ -1572,18 +1633,24 @@ import uuid
 from fastapi import Query
 from fastapi.responses import Response as FastAPIResponse
 
-_GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
-_GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
-_GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/api/agenda/integrations/google/callback")
 _GOOGLE_SCOPES = "https://www.googleapis.com/auth/calendar"
-
-_MICROSOFT_CLIENT_ID = os.getenv("MICROSOFT_CLIENT_ID", "")
-_MICROSOFT_CLIENT_SECRET = os.getenv("MICROSOFT_CLIENT_SECRET", "")
-_MICROSOFT_REDIRECT_URI = os.getenv("MICROSOFT_REDIRECT_URI", "http://localhost:8000/api/agenda/integrations/microsoft/callback")
-_MICROSOFT_TENANT = os.getenv("MICROSOFT_TENANT", "common")
 _MICROSOFT_SCOPES = "Calendars.ReadWrite offline_access"
-
 _FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
+_DEFAULT_BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
+
+
+def _company_cal_cfg(db: Session, company_id: int) -> dict:
+    """Return calendar OAuth config for a company from CompanySetting."""
+    def g(key): return (_get_company_setting(db, company_id, key) or "").strip()
+    return {
+        "google_client_id": g("calendar_google_client_id"),
+        "google_client_secret": g("calendar_google_client_secret"),
+        "google_redirect_uri": g("calendar_google_redirect_uri") or f"{_DEFAULT_BACKEND_URL}/api/agenda/integrations/google/callback",
+        "microsoft_client_id": g("calendar_microsoft_client_id"),
+        "microsoft_client_secret": g("calendar_microsoft_client_secret"),
+        "microsoft_redirect_uri": g("calendar_microsoft_redirect_uri") or f"{_DEFAULT_BACKEND_URL}/api/agenda/integrations/microsoft/callback",
+        "microsoft_tenant": g("calendar_microsoft_tenant") or "common",
+    }
 
 
 def _serialize_event(event: CalendarEvent) -> dict:
@@ -1819,24 +1886,35 @@ def delete_ical_feed(request: Request, db: Session = Depends(get_db)):
         db.commit()
 
 
-# ── Google OAuth ───────────────────────────────────────────────────────────────
+# ── Google OAuth ──────────────────────────────────────────────────────────��────
+
+@app.get("/api/agenda/integrations/available")
+def integrations_available(request: Request, db: Session = Depends(get_db)):
+    user = _current_user(request, db)
+    cfg = _company_cal_cfg(db, user.company_id) if user.company_id else {}
+    return {
+        "google": bool(cfg.get("google_client_id") and cfg.get("google_client_secret")),
+        "microsoft": bool(cfg.get("microsoft_client_id") and cfg.get("microsoft_client_secret")),
+    }
+
 
 @app.get("/api/agenda/integrations/google/auth")
 def google_auth_url(request: Request, db: Session = Depends(get_db)):
     user = _current_user(request, db)
-    if not _GOOGLE_CLIENT_ID:
-        raise HTTPException(501, "Google Calendar no está configurado en este servidor")
+    cfg = _company_cal_cfg(db, user.company_id) if user.company_id else {}
+    if not cfg.get("google_client_id") or not cfg.get("google_client_secret"):
+        raise HTTPException(501, "Google Calendar no está configurado para esta empresa")
     state = _create_token(user.username)
+    from urllib.parse import urlencode
     params = {
-        "client_id": _GOOGLE_CLIENT_ID,
-        "redirect_uri": _GOOGLE_REDIRECT_URI,
+        "client_id": cfg["google_client_id"],
+        "redirect_uri": cfg["google_redirect_uri"],
         "response_type": "code",
         "scope": _GOOGLE_SCOPES,
         "access_type": "offline",
         "prompt": "consent",
         "state": state,
     }
-    from urllib.parse import urlencode
     url = "https://accounts.google.com/o/oauth2/v2/auth?" + urlencode(params)
     return {"url": url}
 
@@ -1851,12 +1929,13 @@ async def google_callback(code: str, state: str, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(400, "Usuario no encontrado")
 
+    cfg = _company_cal_cfg(db, user.company_id) if user.company_id else {}
     async with httpx.AsyncClient() as client:
         resp = await client.post("https://oauth2.googleapis.com/token", data={
             "code": code,
-            "client_id": _GOOGLE_CLIENT_ID,
-            "client_secret": _GOOGLE_CLIENT_SECRET,
-            "redirect_uri": _GOOGLE_REDIRECT_URI,
+            "client_id": cfg.get("google_client_id", ""),
+            "client_secret": cfg.get("google_client_secret", ""),
+            "redirect_uri": cfg.get("google_redirect_uri", ""),
             "grant_type": "authorization_code",
         })
     if not resp.is_success:
@@ -1904,10 +1983,12 @@ async def google_callback(code: str, state: str, db: Session = Depends(get_db)):
 async def _refresh_google_token(intg: UserCalendarIntegration, db: Session) -> Optional[str]:
     if not intg.refresh_token:
         return None
+    user = db.query(User).filter(User.id == intg.user_id).first()
+    cfg = _company_cal_cfg(db, user.company_id) if user and user.company_id else {}
     async with httpx.AsyncClient() as client:
         resp = await client.post("https://oauth2.googleapis.com/token", data={
-            "client_id": _GOOGLE_CLIENT_ID,
-            "client_secret": _GOOGLE_CLIENT_SECRET,
+            "client_id": cfg.get("google_client_id", ""),
+            "client_secret": cfg.get("google_client_secret", ""),
             "refresh_token": intg.refresh_token,
             "grant_type": "refresh_token",
         })
@@ -2034,19 +2115,21 @@ def google_disconnect(request: Request, db: Session = Depends(get_db)):
 @app.get("/api/agenda/integrations/microsoft/auth")
 def microsoft_auth_url(request: Request, db: Session = Depends(get_db)):
     user = _current_user(request, db)
-    if not _MICROSOFT_CLIENT_ID:
-        raise HTTPException(501, "Microsoft Calendar no está configurado en este servidor")
+    cfg = _company_cal_cfg(db, user.company_id) if user.company_id else {}
+    if not cfg.get("microsoft_client_id") or not cfg.get("microsoft_client_secret"):
+        raise HTTPException(501, "Microsoft Calendar no está configurado para esta empresa")
     state = _create_token(user.username)
     from urllib.parse import urlencode
     params = {
-        "client_id": _MICROSOFT_CLIENT_ID,
+        "client_id": cfg["microsoft_client_id"],
         "response_type": "code",
-        "redirect_uri": _MICROSOFT_REDIRECT_URI,
+        "redirect_uri": cfg["microsoft_redirect_uri"],
         "scope": _MICROSOFT_SCOPES,
         "state": state,
         "response_mode": "query",
     }
-    url = f"https://login.microsoftonline.com/{_MICROSOFT_TENANT}/oauth2/v2.0/authorize?" + urlencode(params)
+    tenant = cfg["microsoft_tenant"]
+    url = f"https://login.microsoftonline.com/{tenant}/oauth2/v2.0/authorize?" + urlencode(params)
     return {"url": url}
 
 
@@ -2060,14 +2143,16 @@ async def microsoft_callback(code: str, state: str, db: Session = Depends(get_db
     if not user:
         raise HTTPException(400, "Usuario no encontrado")
 
+    cfg = _company_cal_cfg(db, user.company_id) if user.company_id else {}
+    tenant = cfg.get("microsoft_tenant", "common")
     async with httpx.AsyncClient() as client:
         resp = await client.post(
-            f"https://login.microsoftonline.com/{_MICROSOFT_TENANT}/oauth2/v2.0/token",
+            f"https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token",
             data={
-                "client_id": _MICROSOFT_CLIENT_ID,
-                "client_secret": _MICROSOFT_CLIENT_SECRET,
+                "client_id": cfg.get("microsoft_client_id", ""),
+                "client_secret": cfg.get("microsoft_client_secret", ""),
                 "code": code,
-                "redirect_uri": _MICROSOFT_REDIRECT_URI,
+                "redirect_uri": cfg.get("microsoft_redirect_uri", ""),
                 "grant_type": "authorization_code",
             },
         )
@@ -2107,12 +2192,15 @@ async def microsoft_callback(code: str, state: str, db: Session = Depends(get_db
 async def _refresh_microsoft_token(intg: UserCalendarIntegration, db: Session) -> Optional[str]:
     if not intg.refresh_token:
         return None
+    user = db.query(User).filter(User.id == intg.user_id).first()
+    cfg = _company_cal_cfg(db, user.company_id) if user and user.company_id else {}
+    tenant = cfg.get("microsoft_tenant", "common")
     async with httpx.AsyncClient() as client:
         resp = await client.post(
-            f"https://login.microsoftonline.com/{_MICROSOFT_TENANT}/oauth2/v2.0/token",
+            f"https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token",
             data={
-                "client_id": _MICROSOFT_CLIENT_ID,
-                "client_secret": _MICROSOFT_CLIENT_SECRET,
+                "client_id": cfg.get("microsoft_client_id", ""),
+                "client_secret": cfg.get("microsoft_client_secret", ""),
                 "refresh_token": intg.refresh_token,
                 "grant_type": "refresh_token",
             },
