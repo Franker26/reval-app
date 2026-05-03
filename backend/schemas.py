@@ -14,6 +14,7 @@ from models import (
     TipoPropiedad,
 )
 
+
 # Normalize old Title-Case stage values that may still be in the DB
 _STAGE_LEGACY = {
     "Borrador": "nuevo",
@@ -408,6 +409,60 @@ class PonderadoresDefaults(BaseModel):
 
 
 ACMRead.model_rebuild()
+
+
+# --- Agenda ---
+
+class CalendarEventCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    location: Optional[str] = None
+    start_datetime: datetime
+    end_datetime: datetime
+    all_day: bool = False
+    color: Optional[str] = None
+    recurrence_rule: Optional[str] = None
+
+
+class CalendarEventUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    location: Optional[str] = None
+    start_datetime: Optional[datetime] = None
+    end_datetime: Optional[datetime] = None
+    all_day: Optional[bool] = None
+    color: Optional[str] = None
+    recurrence_rule: Optional[str] = None
+
+
+class CalendarEventRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    description: Optional[str]
+    location: Optional[str]
+    start_datetime: datetime
+    end_datetime: datetime
+    all_day: bool
+    color: Optional[str]
+    recurrence_rule: Optional[str]
+    owner_id: int
+    owner_username: Optional[str] = None
+    company_id: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+
+class CalendarIntegrationRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    provider: str
+    is_active: bool
+    calendar_id: Optional[str]
+    token_expiry: Optional[datetime]
+    created_at: datetime
 
 
 class StepUpdateRequest(BaseModel):
