@@ -14,6 +14,7 @@ import AplicarPonderadores from './pages/AplicarPonderadores.jsx'
 import ResultadosDashboard from './pages/ResultadosDashboard.jsx'
 import ExportarPDF from './pages/ExportarPDF.jsx'
 import Pipeline from './pages/Pipeline.jsx'
+import Agenda from './pages/Agenda.jsx'
 import Home from './pages/Home.jsx'
 import Login from './pages/Login.jsx'
 import Settings from './pages/Settings.jsx'
@@ -410,6 +411,7 @@ function AppRoutes() {
       <Route path="/acm/:id/step/4" element={<PrivateRoute><ResultadosDashboard /></PrivateRoute>} />
       <Route path="/acm/:id/step/5" element={<PrivateRoute><ExportarPDF /></PrivateRoute>} />
       <Route path="/pipeline" element={<PrivateRoute><Pipeline /></PrivateRoute>} />
+      <Route path="/agenda" element={<PrivateRoute><Agenda /></PrivateRoute>} />
       <Route path="/approvals" element={<PrivateRoute><Approvals /></PrivateRoute>} />
       <Route path="/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
       <Route path="/admin" element={<AdminLogin />} />
