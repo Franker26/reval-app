@@ -726,7 +726,7 @@ function ListView({ events, onEventClick }) {
               <div className="agenda-list-item__body">
                 <strong>{event.title}</strong>
                 <span>{event.description || 'Evento del workspace'}</span>
-                {event.location ? <small>{event.location}</small> : null}
+                {event.location ? <small className="agenda-list-item__location">{event.location}</small> : null}
               </div>
               <div className="agenda-list-item__time">{eventTimeLabel(event)}</div>
             </button>
@@ -932,6 +932,9 @@ export default function Agenda() {
   const periodLabel = viewMode === 'week'
     ? `${visibleRange.from.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })} – ${visibleRange.to.toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}`
     : `${MONTHS_ES[currentMonth]} ${currentYear}`
+  const activeViewLabel = viewMode === 'month' ? 'Vista mensual' : viewMode === 'week' ? 'Vista semanal' : 'Vista en lista'
+  const nextEventLabel = nextEvent ? `${nextEvent.title} · ${fmtDateLong(nextEvent.start_datetime)}` : 'No hay próximos eventos'
+  const nextEventTime = nextEvent ? eventTimeLabel(nextEvent) : 'Sin próximos eventos'
 
   if (loading) {
     return (
@@ -948,9 +951,9 @@ export default function Agenda() {
     <div className="agenda-page">
       <section className="agenda-hero">
         <div className="agenda-hero__copy">
-          <span className="page-eyebrow">Workspace</span>
+          <span className="page-eyebrow">Agenda</span>
           <h1>Agenda</h1>
-          <p>Organizá visitas, vencimientos y coordinación operativa dentro de {branding.app_name || 'tu workspace'} sin salir del flujo principal.</p>
+          <p>Coordiná visitas, hitos y vencimientos en una vista más clara para {branding.app_name || 'tu workspace'}, sin salir del flujo operativo del equipo.</p>
 
           <div className="agenda-hero__actions">
             <button type="button" className="btn btn-primary" onClick={() => setModal({ mode: 'create' })}>
@@ -964,26 +967,45 @@ export default function Agenda() {
           </div>
         </div>
 
-        <div className="agenda-hero__stats">
-          <AgendaStat
-            label="Eventos visibles"
-            value={events.length}
-            note={viewMode === 'week' ? 'Semana actual en pantalla' : 'Rango cargado en agenda'}
-            accent="blue"
-          />
-          <AgendaStat
-            label="Próximo evento"
-            value={nextEvent ? fmtTimeDisplay(nextEvent.start_datetime) : '—'}
-            note={nextEvent ? `${nextEvent.title} · ${fmtDateLong(nextEvent.start_datetime)}` : 'No hay próximos eventos'}
-            accent="gold"
-          />
-          <AgendaStat
-            label="Integraciones"
-            value={connectedCount}
-            note={connectedCount ? 'Calendarios conectados' : 'Sin proveedores activos'}
-            accent="green"
-          />
+        <div className="agenda-hero__aside">
+          <div className="agenda-hero-note">
+            <span className="home-panel__eyebrow home-panel__eyebrow--light">Próximo bloque</span>
+            <strong>{nextEvent ? nextEvent.title : 'Sin próximos eventos'}</strong>
+            <p>{nextEvent ? `${fmtDateTimeLong(nextEvent.start_datetime)} · ${eventTimeLabel(nextEvent)}` : 'Creá un evento para empezar a coordinar el calendario del equipo.'}</p>
+          </div>
+
+          <div className="agenda-hero-note agenda-hero-note--soft">
+            <span className="home-panel__eyebrow home-panel__eyebrow--light">Lectura rápida</span>
+            <p>{activeViewLabel} con {events.length} evento{events.length === 1 ? '' : 's'} en el rango visible y {connectedCount} integraci{connectedCount === 1 ? 'ón activa' : 'ones activas'}.</p>
+          </div>
         </div>
+      </section>
+
+      <section className="agenda-summary-grid">
+        <AgendaStat
+          label="Eventos visibles"
+          value={events.length}
+          note={viewMode === 'week' ? 'Semana actual en pantalla' : 'Rango cargado en agenda'}
+          accent="blue"
+        />
+        <AgendaStat
+          label="Próximo evento"
+          value={nextEvent ? fmtTimeDisplay(nextEvent.start_datetime) : '—'}
+          note={nextEventLabel}
+          accent="gold"
+        />
+        <AgendaStat
+          label="Vista activa"
+          value={viewMode === 'month' ? 'Mes' : viewMode === 'week' ? 'Semana' : 'Lista'}
+          note={periodLabel}
+          accent="violet"
+        />
+        <AgendaStat
+          label="Integraciones"
+          value={connectedCount}
+          note={connectedCount ? 'Calendarios conectados' : 'Sin proveedores activos'}
+          accent="green"
+        />
       </section>
 
       {error ? (
@@ -1027,18 +1049,22 @@ export default function Agenda() {
             <div className="agenda-side-card__body">
               <div className="agenda-upcoming-card">
                 <span>Próximo bloque</span>
-                <strong>{nextEvent ? nextEvent.title : 'Sin próximos eventos'}</strong>
-                <p>{nextEvent ? `${fmtDateTimeLong(nextEvent.start_datetime)} · ${eventTimeLabel(nextEvent)}` : 'Creá un evento para empezar a coordinar el calendario del equipo.'}</p>
+                <strong>{nextEventTime}</strong>
+                <p>{nextEventLabel}</p>
               </div>
 
               <div className="agenda-side-list">
                 <div>
                   <span>Vista</span>
-                  <strong>{viewMode === 'month' ? 'Mensual' : viewMode === 'week' ? 'Semanal' : 'Lista'}</strong>
+                  <strong>{activeViewLabel}</strong>
                 </div>
                 <div>
                   <span>Rango</span>
                   <strong>{events.length} evento{events.length === 1 ? '' : 's'}</strong>
+                </div>
+                <div>
+                  <span>Workspace</span>
+                  <strong>{branding.app_name || 'ACM Real Estate'}</strong>
                 </div>
               </div>
             </div>
@@ -1051,17 +1077,21 @@ export default function Agenda() {
 
         <section className="agenda-main home-panel">
           <div className="agenda-main__header">
-            <div>
+            <div className="agenda-main__heading">
               <span className="home-panel__eyebrow">Calendario operativo</span>
               <strong>{periodLabel}</strong>
               <p>Hacé click en un día para crear un evento o seleccioná uno existente para editarlo.</p>
             </div>
 
-            <div className="agenda-controls">
-              <div className="agenda-controls__nav">
-                <button type="button" className="agenda-nav-btn" onClick={viewMode === 'week' ? prevWeek : prevMonth}>‹</button>
-                <button type="button" className="agenda-today-btn" onClick={goToToday}>Hoy</button>
-                <button type="button" className="agenda-nav-btn" onClick={viewMode === 'week' ? nextWeek : nextMonth}>›</button>
+            <div className="agenda-main__toolbar">
+              <div className="agenda-controls">
+                <div className="agenda-controls__nav">
+                  <button type="button" className="agenda-nav-btn" onClick={viewMode === 'week' ? prevWeek : prevMonth}>‹</button>
+                  <button type="button" className="agenda-today-btn" onClick={goToToday}>Hoy</button>
+                  <button type="button" className="agenda-nav-btn" onClick={viewMode === 'week' ? nextWeek : nextMonth}>›</button>
+                </div>
+
+                <div className="agenda-period-badge">{periodLabel}</div>
               </div>
 
               <div className="agenda-view-switcher">
@@ -1084,9 +1114,7 @@ export default function Agenda() {
           </div>
 
           <div className="agenda-calendar-container">
-            {!events.length ? (
-              <AgendaEmptyState onCreate={() => setModal({ mode: 'create' })} />
-            ) : null}
+            {!events.length ? <AgendaEmptyState onCreate={() => setModal({ mode: 'create' })} /> : null}
 
             {viewMode === 'month' ? (
               <MonthGrid
