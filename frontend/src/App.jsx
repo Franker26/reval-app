@@ -13,6 +13,7 @@ import AgregarComparables from './pages/AgregarComparables.jsx'
 import AplicarPonderadores from './pages/AplicarPonderadores.jsx'
 import ResultadosDashboard from './pages/ResultadosDashboard.jsx'
 import ExportarPDF from './pages/ExportarPDF.jsx'
+import Agenda from './pages/Agenda.jsx'
 import Pipeline from './pages/Pipeline.jsx'
 import Home from './pages/Home.jsx'
 import Login from './pages/Login.jsx'
@@ -315,6 +316,7 @@ function AppHeader() {
 
   const navItems = [
     { to: '/', label: 'Tablero', visible: true },
+    { to: '/agenda', label: 'Agenda', visible: Boolean(user) },
     { to: '/approvals', label: 'Aprobaciones', visible: user?.is_approver },
     { to: '/settings', label: 'Configuración', visible: Boolean(user) },
   ].filter((item) => item.visible)
@@ -410,6 +412,7 @@ function AppRoutes() {
       <Route path="/acm/:id/step/4" element={<PrivateRoute><ResultadosDashboard /></PrivateRoute>} />
       <Route path="/acm/:id/step/5" element={<PrivateRoute><ExportarPDF /></PrivateRoute>} />
       <Route path="/pipeline" element={<PrivateRoute><Pipeline /></PrivateRoute>} />
+      <Route path="/agenda" element={<PrivateRoute><Agenda /></PrivateRoute>} />
       <Route path="/approvals" element={<PrivateRoute><Approvals /></PrivateRoute>} />
       <Route path="/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
       <Route path="/admin" element={<AdminLogin />} />
@@ -437,6 +440,11 @@ const SidebarIcons = {
       <rect x="2" y="3" width="4" height="14" rx="1.5" />
       <rect x="8" y="3" width="4" height="14" rx="1.5" />
       <rect x="14" y="3" width="4" height="14" rx="1.5" />
+    </svg>
+  ),
+  agenda: (
+    <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18" aria-hidden="true">
+      <path d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" />
     </svg>
   ),
   revisiones: (
@@ -497,6 +505,11 @@ function WorkspaceSidebar() {
     })
   }
 
+  function handleLogout() {
+    logout()
+    navigate('/login')
+  }
+
   const navItems = [
     {
       key: 'dashboard',
@@ -515,6 +528,14 @@ function WorkspaceSidebar() {
       visible: true,
     },
     {
+      key: 'agenda',
+      label: 'Agenda',
+      icon: SidebarIcons.agenda,
+      to: '/agenda',
+      active: location.pathname.startsWith('/agenda'),
+      visible: Boolean(user),
+    },
+    {
       key: 'revisiones',
       label: 'Revisiones',
       icon: SidebarIcons.revisiones,
@@ -523,11 +544,6 @@ function WorkspaceSidebar() {
       visible: Boolean(user?.is_approver),
     },
   ].filter((item) => item.visible)
-
-  function handleLogout() {
-    logout()
-    navigate('/login')
-  }
 
   return (
     <aside className={`workspace-sidebar${collapsed ? ' is-collapsed' : ''}`} aria-label="Navegación del workspace">
@@ -628,7 +644,7 @@ function AppShell() {
   }, [])
 
   const isWorkflowRoute = location.pathname.startsWith('/acm/')
-  const isWorkspaceRoute = location.pathname === '/' || location.pathname === '/pipeline' || location.pathname.startsWith('/approvals') || location.pathname.startsWith('/settings')
+  const isWorkspaceRoute = location.pathname === '/' || location.pathname === '/pipeline' || location.pathname.startsWith('/agenda') || location.pathname.startsWith('/approvals') || location.pathname.startsWith('/settings')
   const showWorkspaceSidebar = isWorkspaceRoute && !isWorkflowRoute && !isMobile
 
   return (
