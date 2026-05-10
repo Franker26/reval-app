@@ -423,13 +423,53 @@ function AppRoutes() {
   )
 }
 
+const SidebarIcons = {
+  dashboard: (
+    <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18" aria-hidden="true">
+      <rect x="2" y="2" width="7" height="7" rx="1.5" />
+      <rect x="11" y="2" width="7" height="7" rx="1.5" />
+      <rect x="2" y="11" width="7" height="7" rx="1.5" />
+      <rect x="11" y="11" width="7" height="7" rx="1.5" />
+    </svg>
+  ),
+  pipeline: (
+    <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18" aria-hidden="true">
+      <rect x="2" y="3" width="4" height="14" rx="1.5" />
+      <rect x="8" y="3" width="4" height="14" rx="1.5" />
+      <rect x="14" y="3" width="4" height="14" rx="1.5" />
+    </svg>
+  ),
+  revisiones: (
+    <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18" aria-hidden="true">
+      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+    </svg>
+  ),
+  settings: (
+    <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18" aria-hidden="true">
+      <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
+    </svg>
+  ),
+  collapse: (
+    <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true">
+      <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
+    </svg>
+  ),
+  expand: (
+    <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true">
+      <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+    </svg>
+  ),
+}
+
 function WorkspaceSidebar() {
   const { user, logout } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
   const [logo, setLogo] = useState(() => getSavedLogo())
   const [appName, setAppName] = useState(() => getSavedAppName())
-  const [menuOpen, setMenuOpen] = useState(false)
+  const [collapsed, setCollapsed] = useState(() => {
+    try { return localStorage.getItem('sidebar_collapsed') === 'true' } catch { return false }
+  })
 
   useEffect(() => {
     function onStorage(e) {
@@ -449,37 +489,38 @@ function WorkspaceSidebar() {
     return () => window.removeEventListener('acm_theme_changed', onThemeChange)
   }, [])
 
-  useEffect(() => {
-    setMenuOpen(false)
-  }, [location.pathname])
+  function toggleCollapsed() {
+    setCollapsed((prev) => {
+      const next = !prev
+      try { localStorage.setItem('sidebar_collapsed', String(next)) } catch {}
+      return next
+    })
+  }
 
   const navItems = [
     {
       key: 'dashboard',
       label: 'Dashboard',
-      description: 'Tablero operativo de tasaciones',
-      note: 'Vista general',
+      icon: SidebarIcons.dashboard,
       to: '/',
-      visible: true,
       active: location.pathname === '/',
+      visible: true,
     },
     {
-      key: 'approvals',
-      label: 'Aprobaciones',
-      description: 'Cola de revisión del equipo',
-      note: 'Pendientes y feedback',
+      key: 'pipeline',
+      label: 'Pipeline',
+      icon: SidebarIcons.pipeline,
+      to: '/pipeline',
+      active: location.pathname === '/pipeline',
+      visible: true,
+    },
+    {
+      key: 'revisiones',
+      label: 'Revisiones',
+      icon: SidebarIcons.revisiones,
       to: '/approvals',
-      visible: user?.is_approver,
       active: location.pathname.startsWith('/approvals'),
-    },
-    {
-      key: 'settings',
-      label: 'Configuración',
-      description: 'Marca, usuarios y preferencias',
-      note: 'Workspace',
-      to: '/settings',
-      visible: Boolean(user),
-      active: location.pathname.startsWith('/settings'),
+      visible: Boolean(user?.is_approver),
     },
   ].filter((item) => item.visible)
 
@@ -489,80 +530,82 @@ function WorkspaceSidebar() {
   }
 
   return (
-    <aside className="workspace-sidebar" aria-label="Navegación del workspace">
-      <section className="home-panel home-panel--brand">
-        <div className="home-workspace-card">
-          <span className="home-workspace-card__mark">
-            {logo ? (
-              <img src={logo} alt={`${appName} logo`} className="home-workspace-card__logo" />
-            ) : (
-              <span>{appName.slice(0, 1).toUpperCase()}</span>
-            )}
-          </span>
-          <div>
-            <span className="home-panel__eyebrow">Workspace</span>
-            <strong>{appName}</strong>
-            <p>{user?.is_admin ? 'Vista de coordinación del equipo.' : 'Centro operativo personal.'}</p>
+    <aside className={`workspace-sidebar${collapsed ? ' is-collapsed' : ''}`} aria-label="Navegación del workspace">
+      <div className="sidebar__brand">
+        <span className="sidebar__brand-mark">
+          {logo ? (
+            <img src={logo} alt={`${appName} logo`} className="sidebar__brand-logo" />
+          ) : (
+            <span className="sidebar__brand-glyph">{appName.slice(0, 1).toUpperCase()}</span>
+          )}
+        </span>
+        {!collapsed && (
+          <div className="sidebar__brand-copy">
+            <strong className="sidebar__brand-name">{appName}</strong>
+            <span className="sidebar__brand-desc">{user?.is_admin ? 'Coordinación de equipo' : 'Workspace operativo'}</span>
           </div>
-        </div>
+        )}
+      </div>
 
-        <button
-          type="button"
-          className={`home-workspace-menu-toggle${menuOpen ? ' is-open' : ''}`}
-          aria-expanded={menuOpen}
-          aria-controls="workspace-nav-menu"
-          onClick={() => setMenuOpen((current) => !current)}
-        >
-          <span className="home-workspace-menu-toggle__copy">
-            <strong>Accesos</strong>
-            <small>Explorar workspace</small>
-          </span>
-          <span className="home-workspace-menu-toggle__chevron" aria-hidden="true">⌄</span>
-        </button>
+      <nav className="sidebar__nav" aria-label="Secciones principales">
+        {navItems.map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            className={`sidebar__nav-item${item.active ? ' is-active' : ''}`}
+            onClick={() => navigate(item.to)}
+            title={collapsed ? item.label : undefined}
+            aria-label={item.label}
+            aria-current={item.active ? 'page' : undefined}
+          >
+            <span className="sidebar__nav-icon">{item.icon}</span>
+            {!collapsed && <span className="sidebar__nav-label">{item.label}</span>}
+          </button>
+        ))}
+      </nav>
 
-        <div
-          id="workspace-nav-menu"
-          className={`home-workspace-menu${menuOpen ? ' is-open' : ''}`}
-          aria-hidden={!menuOpen}
-        >
-          <div className="home-panel__header home-panel__header--menu">
-            <div>
-              <span className="home-panel__eyebrow">Navegación</span>
-              <strong>Accesos principales</strong>
+      <div className="sidebar__spacer" />
+
+      <button
+        type="button"
+        className="sidebar__nav-item sidebar__nav-item--settings"
+        onClick={() => navigate('/settings')}
+        title={collapsed ? 'Configuración' : undefined}
+        aria-label="Configuración"
+        aria-current={location.pathname.startsWith('/settings') ? 'page' : undefined}
+      >
+        <span className="sidebar__nav-icon">{SidebarIcons.settings}</span>
+        {!collapsed && <span className="sidebar__nav-label">Configuración</span>}
+      </button>
+
+      <div className="sidebar__footer">
+        <div className="sidebar__user" title={collapsed ? user?.username : undefined}>
+          <div className="sidebar__user-avatar" style={{ background: avatarColor(user?.username || 'Usuario') }}>
+            {initials(user?.username || 'Usuario')}
+          </div>
+          {!collapsed && (
+            <div className="sidebar__user-info">
+              <strong>{user?.username || 'Usuario'}</strong>
+              <span>{userRoleLabel(user)}</span>
             </div>
-          </div>
-
-          <div className="home-rail-nav">
-            {navItems.map((item) => (
-              <button
-                key={item.key}
-                type="button"
-                className={`home-rail-nav__item${item.active ? ' is-active' : ''}`}
-                onClick={() => navigate(item.to)}
-              >
-                <span>{item.label}</span>
-                <strong>{item.description}</strong>
-                <small>{item.note}</small>
-              </button>
-            ))}
-          </div>
-
-          <div className="home-workspace-menu__footer">
-            <div className="home-user-card">
-              <div className="home-user-card__avatar" style={{ background: avatarColor(user?.username || 'Usuario') }}>
-                {initials(user?.username || 'Usuario')}
-              </div>
-              <div>
-                <strong>{user?.username || 'Usuario'}</strong>
-                <p>{userRoleLabel(user)}</p>
-              </div>
-            </div>
-            <button type="button" className="home-user-card__logout" onClick={handleLogout}>
-              Cerrar sesión
-            </button>
-          </div>
+          )}
         </div>
-      </section>
+        {!collapsed && (
+          <button type="button" className="sidebar__logout" onClick={handleLogout}>
+            Salir
+          </button>
+        )}
+      </div>
+
+      <button
+        type="button"
+        className="sidebar__toggle"
+        onClick={toggleCollapsed}
+        aria-label={collapsed ? 'Expandir sidebar' : 'Colapsar sidebar'}
+        title={collapsed ? 'Expandir' : 'Colapsar'}
+      >
+        {collapsed ? SidebarIcons.expand : SidebarIcons.collapse}
+      </button>
     </aside>
   )
 }
