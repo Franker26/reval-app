@@ -13,6 +13,7 @@ import AgregarComparables from './pages/AgregarComparables.jsx'
 import AplicarPonderadores from './pages/AplicarPonderadores.jsx'
 import ResultadosDashboard from './pages/ResultadosDashboard.jsx'
 import ExportarPDF from './pages/ExportarPDF.jsx'
+import Pipeline from './pages/Pipeline.jsx'
 import Home from './pages/Home.jsx'
 import Login from './pages/Login.jsx'
 import Settings from './pages/Settings.jsx'
@@ -309,6 +310,7 @@ function AppHeader() {
   const isHomeRoute = location.pathname === '/'
   const isApprovalsRoute = location.pathname === '/approvals'
   const isSettingsRoute = location.pathname === '/settings'
+  const isPipelineRoute = location.pathname === '/pipeline'
   const isWorkflowRoute = location.pathname.startsWith('/acm/')
 
   const navItems = [
@@ -318,7 +320,7 @@ function AppHeader() {
   ].filter((item) => item.visible)
 
   return (
-    <header className={`app-header${isHomeRoute || isApprovalsRoute || isSettingsRoute || isWorkflowRoute ? ' app-header--workspace-hidden app-header--home-mobile-hidden' : ''}`}>
+    <header className={`app-header${isHomeRoute || isApprovalsRoute || isSettingsRoute || isPipelineRoute || isWorkflowRoute ? ' app-header--workspace-hidden app-header--home-mobile-hidden' : ''}`}>
       <div className="app-header__shell">
         <div className="app-header__left">
           <Link to="/" className="app-title">
@@ -407,6 +409,7 @@ function AppRoutes() {
       <Route path="/acm/:id/step/3" element={<PrivateRoute><AplicarPonderadores /></PrivateRoute>} />
       <Route path="/acm/:id/step/4" element={<PrivateRoute><ResultadosDashboard /></PrivateRoute>} />
       <Route path="/acm/:id/step/5" element={<PrivateRoute><ExportarPDF /></PrivateRoute>} />
+      <Route path="/pipeline" element={<PrivateRoute><Pipeline /></PrivateRoute>} />
       <Route path="/approvals" element={<PrivateRoute><Approvals /></PrivateRoute>} />
       <Route path="/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
       <Route path="/admin" element={<AdminLogin />} />
@@ -582,7 +585,7 @@ function AppShell() {
   }, [])
 
   const isWorkflowRoute = location.pathname.startsWith('/acm/')
-  const isWorkspaceRoute = location.pathname === '/' || location.pathname.startsWith('/approvals') || location.pathname.startsWith('/settings')
+  const isWorkspaceRoute = location.pathname === '/' || location.pathname === '/pipeline' || location.pathname.startsWith('/approvals') || location.pathname.startsWith('/settings')
   const showWorkspaceSidebar = isWorkspaceRoute && !isWorkflowRoute && !isMobile
 
   return (

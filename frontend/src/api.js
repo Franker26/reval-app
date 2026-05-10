@@ -92,3 +92,11 @@ export const listModifiers = () => request('GET', '/api/modifiers')
 export const createModifier = (data) => request('POST', '/api/modifiers', data)
 export const updateModifier = (id, data) => request('PUT', `/api/modifiers/${id}`, data)
 export const deleteModifier = (id) => request('DELETE', `/api/modifiers/${id}`)
+
+export const listEvents = (from, to) => {
+  const params = new URLSearchParams()
+  if (from) params.set('from', from)
+  if (to) params.set('to', to)
+  const qs = params.toString()
+  return request('GET', `/api/agenda/events${qs ? `?${qs}` : ''}`)
+}

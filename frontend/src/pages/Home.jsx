@@ -1,14 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { deleteACM, listACMs, updateACM } from '../api.js'
+import { deleteACM, listACMs, listEvents, listPendingApprovals, updateACM } from '../api.js'
 import { useAuth, useConfirm, useWizard } from '../App.jsx'
 import { LoadingState, MobileWorkspaceLoading, StateCard } from '../components/StatusState.jsx'
 
 const COLUMNS = [
-  { key: 'nuevo', title: 'Nuevo', description: 'Tasaciones recién creadas o pendientes de completar.', tone: 'blue' },
-  { key: 'en_progreso', title: 'En progreso', description: 'Trabajos con comparables o ajustes en análisis.', tone: 'violet' },
-  { key: 'finalizado', title: 'Finalizado', description: 'Tasaciones listas para exportar o compartir.', tone: 'green' },
-  { key: 'cancelado', title: 'Cancelado', description: 'Análisis descartados o pausados.', tone: 'slate' },
+  { key: 'nuevo', title: 'Nuevo', tone: 'blue' },
+  { key: 'en_progreso', title: 'En progreso', tone: 'violet' },
+  { key: 'finalizado', title: 'Finalizado', tone: 'green' },
+  { key: 'cancelado', title: 'Cancelado', tone: 'slate' },
 ]
 
 function initials(name = '') {
@@ -30,40 +30,16 @@ function statusLabel(acm) {
 function statusMeta(acm) {
   const label = statusLabel(acm)
   const normalized = String(label).toLowerCase()
-
   if (normalized.includes('cambio')) {
-    return {
-      label,
-      tone: 'danger',
-      hint: 'Requiere cambios antes de poder aprobarse.',
-      dotLabel: 'Cambios solicitados',
-    }
+    return { label, tone: 'danger', hint: 'Requiere cambios antes de poder aprobarse.', dotLabel: 'Cambios solicitados' }
   }
-
   if (normalized.includes('aprob')) {
-    return {
-      label,
-      tone: 'success',
-      hint: 'Tasacion aprobada y lista para continuar o exportar.',
-      dotLabel: 'Aprobada',
-    }
+    return { label, tone: 'success', hint: 'Tasacion aprobada y lista para continuar o exportar.', dotLabel: 'Aprobada' }
   }
-
   if (normalized.includes('pendiente')) {
-    return {
-      label,
-      tone: 'warning',
-      hint: 'Pendiente de revision y aprobacion.',
-      dotLabel: 'Pendiente',
-    }
+    return { label, tone: 'warning', hint: 'Pendiente de revision y aprobacion.', dotLabel: 'Pendiente' }
   }
-
-  return {
-    label,
-    tone: 'neutral',
-    hint: 'Esta tasacion no requiere aprobacion.',
-    dotLabel: 'Sin aprobacion',
-  }
+  return { label, tone: 'neutral', hint: 'Esta tasacion no requiere aprobacion.', dotLabel: 'Sin aprobacion' }
 }
 
 function stageProgress(acm) {
@@ -91,14 +67,21 @@ function formatDate(value) {
   return new Date(value).toLocaleDateString('es-AR')
 }
 
+function formatEventDate(value) {
+  return new Date(value).toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short' })
+}
+
+function formatEventTime(value, allDay) {
+  if (allDay) return 'Todo el día'
+  return new Date(value).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
+}
+
 export default function Home() {
   const [acms, setAcms] = useState([])
+  const [events, setEvents] = useState([])
+  const [pendingApprovals, setPendingApprovals] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [updatingId, setUpdatingId] = useState(null)
-  const [draggedId, setDraggedId] = useState(null)
-  const [dragOverCol, setDragOverCol] = useState(null)
-  const [openMenuId, setOpenMenuId] = useState(null)
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
   const [quickCreateOpen, setQuickCreateOpen] = useState(false)
   const [quickDraft, setQuickDraft] = useState({ nombre: '', direccion: '' })
@@ -114,41 +97,41 @@ export default function Home() {
   const navigate = useNavigate()
 
   useEffect(() => {
-    listACMs()
-      .then(setAcms)
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false))
-  }, [])
+    const now = new Date()
+    const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+    const fetches = [
+      listACMs().then(setAcms).catch((e) => setError(e.message)),
+      listEvents(now.toISOString(), nextWeek.toISOString()).then(setEvents).catch(() => {}),
+    ]
+    if (user?.is_approver) {
+      fetches.push(listPendingApprovals().then(setPendingApprovals).catch(() => {}))
+    }
+    Promise.all(fetches).finally(() => setLoading(false))
+  }, [user?.is_approver])
 
   useEffect(() => {
-    function handleWindowClick() {
-      setOpenMenuId(null)
-    }
-    window.addEventListener('click', handleWindowClick)
-    return () => window.removeEventListener('click', handleWindowClick)
-  }, [])
-
-  useEffect(() => {
-    function handleResize() {
-      setIsMobile(window.innerWidth <= 820)
-    }
+    function handleResize() { setIsMobile(window.innerWidth <= 820) }
     handleResize()
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
   }, [])
 
   const grouped = useMemo(() => {
-    const base = Object.fromEntries(COLUMNS.map((column) => [column.key, []]))
+    const base = Object.fromEntries(COLUMNS.map((col) => [col.key, []]))
     for (const acm of acms) {
       const key = acm.stage || 'nuevo'
       if (!base[key]) base[key] = []
       base[key].push(acm)
     }
-    Object.values(base).forEach((items) => {
-      items.sort((a, b) => new Date(b.updated_at || b.fecha_creacion) - new Date(a.updated_at || a.fecha_creacion))
-    })
     return base
   }, [acms])
+
+  const stageCounts = useMemo(() => ({
+    nuevo: grouped.nuevo?.length || 0,
+    en_progreso: grouped.en_progreso?.length || 0,
+    finalizado: grouped.finalizado?.length || 0,
+    cancelado: grouped.cancelado?.length || 0,
+  }), [grouped])
 
   const recentAcms = useMemo(() => {
     return [...acms].sort((a, b) => new Date(b.updated_at || b.fecha_creacion) - new Date(a.updated_at || a.fecha_creacion))
@@ -168,27 +151,22 @@ export default function Home() {
   }, [recentAcms])
 
   const mobileOverview = useMemo(() => {
-    const pendingApprovals = acms.filter((acm) => String(acm.approval_status || '').toLowerCase() === 'pendiente').length
-    const completed = grouped.finalizado?.length || 0
-    const inFlight = (grouped.nuevo?.length || 0) + (grouped.en_progreso?.length || 0)
-    const comparables = acms.reduce((total, acm) => total + (acm.cantidad_comparables || 0), 0)
+    const pendingCount = acms.filter((acm) => String(acm.approval_status || '').toLowerCase() === 'pendiente').length
     return {
       total: acms.length,
-      pendingApprovals,
-      completed,
-      inFlight,
-      comparables,
+      pendingApprovals: pendingCount,
+      completed: grouped.finalizado?.length || 0,
+      inFlight: (grouped.nuevo?.length || 0) + (grouped.en_progreso?.length || 0),
     }
   }, [acms, grouped])
 
-  const summary = useMemo(() => {
-    return [
-      { label: 'Tasaciones activas', value: mobileOverview.inFlight, tone: 'blue', note: 'Casos en trabajo real' },
-      { label: 'Finalizadas', value: mobileOverview.completed, tone: 'green', note: 'Listas para cierre o entrega' },
-      { label: 'Pendientes de aprobación', value: mobileOverview.pendingApprovals, tone: 'amber', note: 'Esperando revisión del equipo' },
-      { label: 'Comparables cargados', value: mobileOverview.comparables, tone: 'violet', note: 'Base de mercado acumulada' },
-    ]
-  }, [mobileOverview])
+  const upcomingEvents = useMemo(() => {
+    const now = new Date()
+    return [...events]
+      .filter((e) => new Date(e.end_datetime || e.start_datetime) >= now)
+      .sort((a, b) => new Date(a.start_datetime) - new Date(b.start_datetime))
+      .slice(0, 4)
+  }, [events])
 
   function handleNew() {
     dispatch({ type: 'RESET' })
@@ -204,19 +182,13 @@ export default function Home() {
     const nextErrors = {}
     if (!quickDraft.nombre.trim()) nextErrors.nombre = 'Requerido'
     if (!quickDraft.direccion.trim()) nextErrors.direccion = 'Requerido'
-    if (Object.keys(nextErrors).length) {
-      setQuickErrors(nextErrors)
-      return
-    }
+    if (Object.keys(nextErrors).length) { setQuickErrors(nextErrors); return }
     dispatch({ type: 'RESET' })
     setQuickCreateOpen(false)
     navigate('/acm/new', {
       state: {
         tipo: 'Departamento',
-        quickDraft: {
-          nombre: quickDraft.nombre.trim(),
-          direccion: quickDraft.direccion.trim(),
-        },
+        quickDraft: { nombre: quickDraft.nombre.trim(), direccion: quickDraft.direccion.trim() },
       },
     })
   }
@@ -236,6 +208,30 @@ export default function Home() {
     setMobileDrawerOpen(false)
     logout()
     navigate('/login')
+  }
+
+  async function handleDelete(id, nombre) {
+    const accepted = await confirm({
+      tone: 'danger',
+      eyebrow: 'Eliminar tasación',
+      title: `Se va a eliminar "${nombre}"`,
+      description: 'Esta acción quitará la tasación del tablero. Si querés conservar el historial, podés moverla a Cancelado.',
+      confirmLabel: 'Eliminar tasación',
+      cancelLabel: 'Mantener tasación',
+    })
+    if (!accepted) return
+    try {
+      await deleteACM(id)
+      setAcms((prev) => prev.filter((a) => a.id !== id))
+    } catch (e) {
+      setError(e.message)
+    }
+  }
+
+  function handleOpen(acm) {
+    dispatch({ type: 'SET_ACM_ID', payload: acm.id })
+    const nextStep = acm.cantidad_comparables > 0 ? 2 : 1
+    navigate(`/acm/${acm.id}/step/${nextStep}`)
   }
 
   if (isMobile && routeTransition) {
@@ -262,80 +258,6 @@ export default function Home() {
             ]}
       />
     )
-  }
-
-  async function handleDelete(id, nombre) {
-    const accepted = await confirm({
-      tone: 'danger',
-      eyebrow: 'Eliminar tasación',
-      title: `Se va a eliminar "${nombre}"`,
-      description: 'Esta acción quitará la tasación del tablero. Si querés conservar el historial, podés moverla a Cancelado en lugar de eliminarla.',
-      confirmLabel: 'Eliminar tasación',
-      cancelLabel: 'Mantener tasación',
-    })
-    if (!accepted) return
-
-    try {
-      await deleteACM(id)
-      setAcms((prev) => prev.filter((a) => a.id !== id))
-    } catch (e) {
-      setError(e.message)
-    }
-  }
-
-  function handleOpen(acm) {
-    dispatch({ type: 'SET_ACM_ID', payload: acm.id })
-    const nextStep = acm.cantidad_comparables > 0 ? 2 : 1
-    navigate(`/acm/${acm.id}/step/${nextStep}`)
-  }
-
-  async function handleStageChange(acm, stage) {
-    if (acm.stage === stage) return
-    setUpdatingId(acm.id)
-    // Optimistic update
-    setAcms((prev) => prev.map((item) => (item.id === acm.id ? { ...item, stage } : item)))
-    try {
-      const updated = await updateACM(acm.id, { stage })
-      setAcms((prev) => prev.map((item) => (item.id === acm.id ? { ...item, ...updated } : item)))
-    } catch (e) {
-      // Revert on failure
-      setAcms((prev) => prev.map((item) => (item.id === acm.id ? { ...item, stage: acm.stage } : item)))
-      setError(e.message)
-    } finally {
-      setUpdatingId(null)
-    }
-  }
-
-  function handleDragStart(e, acm) {
-    setDraggedId(acm.id)
-    e.dataTransfer.effectAllowed = 'move'
-  }
-
-  function handleDragOver(e, colKey) {
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
-    setDragOverCol(colKey)
-  }
-
-  function handleDragLeave(e) {
-    // Only clear if leaving the column entirely (not entering a child)
-    if (!e.currentTarget.contains(e.relatedTarget)) {
-      setDragOverCol(null)
-    }
-  }
-
-  async function handleDrop(e, colKey) {
-    e.preventDefault()
-    setDragOverCol(null)
-    if (!draggedId) return
-    const acm = acms.find((a) => a.id === draggedId)
-    setDraggedId(null)
-    if (acm) await handleStageChange(acm, colKey)
-  }
-
-  function handleDragEnd() {
-    setDraggedId(null)
-    setDragOverCol(null)
   }
 
   return (
@@ -377,6 +299,7 @@ export default function Home() {
 
       {!loading && !error && (
         <>
+          {/* ── Mobile shell ─────────────────────────────────────────── */}
           <section className="home-mobile-shell">
             <button
               type="button"
@@ -391,9 +314,7 @@ export default function Home() {
                   <span className="home-mobile-section-label">Tasación rápida</span>
                   <strong>Creá el ACM con lo mínimo</strong>
                 </div>
-                <button type="button" className="home-mobile-quick-modal__close" onClick={() => setQuickCreateOpen(false)}>
-                  ×
-                </button>
+                <button type="button" className="home-mobile-quick-modal__close" onClick={() => setQuickCreateOpen(false)}>×</button>
               </div>
               <div className="home-mobile-quick-modal__body">
                 <label className="home-mobile-quick-field">
@@ -440,26 +361,15 @@ export default function Home() {
                     <span>{user?.is_admin ? 'Administrador' : 'Workspace operativo'}</span>
                   </div>
                 </div>
-                <button type="button" className="home-mobile-drawer__close" onClick={() => setMobileDrawerOpen(false)}>
-                  ×
-                </button>
+                <button type="button" className="home-mobile-drawer__close" onClick={() => setMobileDrawerOpen(false)}>×</button>
               </div>
-
               <div className="home-mobile-drawer__actions">
-                <button type="button" className="settings-sidebar-item settings-sidebar-item--active" onClick={() => handleMobileNavigate('/settings')}>
-                  Configuración
-                </button>
-                <button type="button" className="settings-sidebar-item" onClick={() => handleMobileNavigate('/settings')}>
-                  Cambiar contraseña
-                </button>
+                <button type="button" className="settings-sidebar-item settings-sidebar-item--active" onClick={() => handleMobileNavigate('/settings')}>Configuración</button>
+                <button type="button" className="settings-sidebar-item" onClick={() => handleMobileNavigate('/settings')}>Cambiar contraseña</button>
                 {user?.is_approver && (
-                  <button type="button" className="settings-sidebar-item" onClick={() => handleMobileNavigate('/approvals')}>
-                    Aprobaciones
-                  </button>
+                  <button type="button" className="settings-sidebar-item" onClick={() => handleMobileNavigate('/approvals')}>Aprobaciones</button>
                 )}
-                <button type="button" className="settings-sidebar-item" onClick={handleMobileLogout}>
-                  Cerrar sesión
-                </button>
+                <button type="button" className="settings-sidebar-item" onClick={handleMobileLogout}>Cerrar sesión</button>
               </div>
             </aside>
 
@@ -482,13 +392,9 @@ export default function Home() {
                 </button>
                 <div className="home-mobile-header__utilities">
                   {user?.is_approver && (
-                    <button type="button" className="home-mobile-utility-pill" onClick={() => handleMobileNavigate('/approvals')}>
-                      Aprobaciones
-                    </button>
+                    <button type="button" className="home-mobile-utility-pill" onClick={() => handleMobileNavigate('/approvals')}>Aprobaciones</button>
                   )}
-                  <button type="button" className="home-mobile-utility-icon" onClick={() => setMobileDrawerOpen(true)} aria-label="Abrir perfil">
-                    ≡
-                  </button>
+                  <button type="button" className="home-mobile-utility-icon" onClick={() => setMobileDrawerOpen(true)} aria-label="Abrir perfil">≡</button>
                 </div>
               </header>
 
@@ -524,7 +430,6 @@ export default function Home() {
                   <strong>Deslizá y retomá rápido</strong>
                 </div>
               </div>
-
               {spotlightAcms.length > 0 ? (
                 <div className="home-mobile-carousel" role="list" aria-label="ACMs recientes">
                   {spotlightAcms.map((acm) => {
@@ -557,9 +462,7 @@ export default function Home() {
                   })}
                 </div>
               ) : (
-                <div className="kanban-empty">
-                  No hay ACMs activos para mostrar en el carrusel.
-                </div>
+                <div className="kanban-empty">No hay ACMs activos para mostrar en el carrusel.</div>
               )}
             </section>
 
@@ -571,7 +474,6 @@ export default function Home() {
                 </div>
                 <span className="home-mobile-feed__count">{actionableAcms.length} casos</span>
               </div>
-
               {actionableAcms.map((acm) => {
                 const status = statusMeta(acm)
                 return (
@@ -581,12 +483,7 @@ export default function Home() {
                     onClick={() => handleOpen(acm)}
                     tabIndex={0}
                     role="button"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault()
-                        handleOpen(acm)
-                      }
-                    }}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleOpen(acm) } }}
                   >
                     <div className="home-mobile-list-card__main">
                       <div>
@@ -607,9 +504,7 @@ export default function Home() {
                 )
               })}
               {actionableAcms.length === 0 && (
-                <div className="kanban-empty">
-                  No hay casos urgentes en este momento.
-                </div>
+                <div className="kanban-empty">No hay casos urgentes en este momento.</div>
               )}
             </section>
 
@@ -620,256 +515,114 @@ export default function Home() {
             </nav>
           </section>
 
-          <section className="home-desktop-shell" aria-label="Workspace desktop">
-            <div className="home-dashboard__content">
-                <section className="home-hero-panel">
-                  <div className="home-hero-panel__copy">
-                    <span className="home-panel__eyebrow home-panel__eyebrow--light">Workspace operativo</span>
-                    <div className="home-hero-panel__greeting">{greeting()}{user?.username ? `, ${user.username}` : ''}</div>
-                    <h1>Tablero de tasaciones</h1>
-                    <p>
-                      {user?.is_admin
-                        ? 'Coordiná al equipo, detectá cuellos de botella y mantené el flujo del workspace claro desde una sola vista.'
-                        : 'Retomá casos activos, detectá prioridades y mové tasaciones entre etapas con una experiencia más simple y armoniosa.'}
-                    </p>
-                  </div>
+          {/* ── Desktop dashboard ─────────────────────────────────────── */}
+          <section className="home-desktop-shell" aria-label="Dashboard">
+            <div className="dashboard-header">
+              <div>
+                <span className="home-panel__eyebrow">Dashboard</span>
+                <h1 className="dashboard-greeting">{greeting()}{user?.username ? `, ${user.username}` : ''}</h1>
+              </div>
+              <button type="button" className="btn btn-primary" onClick={handleNew}>
+                + Nueva tasación
+              </button>
+            </div>
 
-                  <div className="home-hero-panel__aside">
-                    <article className="home-hero-note">
-                      <span className="home-panel__eyebrow home-panel__eyebrow--light">Vista activa</span>
-                      <strong>{user?.is_admin ? 'Equipo completo' : 'Seguimiento personal'}</strong>
-                      <p>{acms.length} tasaciones sincronizadas en el workspace.</p>
-                    </article>
-                    <article className="home-hero-note home-hero-note--soft">
-                      <span className="home-panel__eyebrow home-panel__eyebrow--light">Próximo foco</span>
-                      <strong>{mobileOverview.pendingApprovals > 0 ? 'Aprobaciones pendientes' : 'Flujo estable'}</strong>
-                      <p>
-                        {mobileOverview.pendingApprovals > 0
-                          ? `${mobileOverview.pendingApprovals} caso${mobileOverview.pendingApprovals === 1 ? '' : 's'} espera${mobileOverview.pendingApprovals === 1 ? '' : 'n'} revisión.`
-                          : 'No hay bloqueos de aprobación en este momento.'}
-                      </p>
-                    </article>
-                    <div className="home-hero-panel__actions">
-                      <button type="button" className="btn btn-primary" onClick={handleNew}>
-                        + Nueva tasación
-                      </button>
-                      {user?.is_approver && (
-                        <button type="button" className="home-hero-panel__ghost" onClick={() => navigate('/approvals')}>
-                          Ver aprobaciones
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </section>
-
-                <section className="home-summary-grid">
-                  {summary.map((item) => (
-                    <article key={item.label} className={`home-summary-card home-summary-card--${item.tone}`}>
-                      <span>{item.label}</span>
-                      <strong>{item.value}</strong>
-                      <small>{item.note}</small>
-                    </article>
+            <div className="dashboard-grid">
+              {/* Island 1: KPIs by stage */}
+              <section className="dashboard-island dashboard-island--kpis">
+                <div className="dashboard-island__header">
+                  <span className="home-panel__eyebrow">Tasaciones</span>
+                  <strong>Estado del pipeline</strong>
+                </div>
+                <div className="dashboard-kpi-grid">
+                  {COLUMNS.map((col) => (
+                    <button
+                      key={col.key}
+                      type="button"
+                      className={`dashboard-kpi-card dashboard-kpi-card--${col.tone}`}
+                      onClick={() => navigate('/pipeline')}
+                    >
+                      <span className="dashboard-kpi-card__value">{stageCounts[col.key]}</span>
+                      <span className="dashboard-kpi-card__label">{col.title}</span>
+                    </button>
                   ))}
-                </section>
+                </div>
+              </section>
 
-                <section className="home-context-grid">
-                  <article className="home-panel home-panel--list">
-                    <div className="home-panel__header">
-                      <div>
-                        <span className="home-panel__eyebrow">En foco</span>
-                        <strong>Casos para retomar rápido</strong>
+              {/* Island 2: Upcoming agenda events */}
+              <section className="dashboard-island">
+                <div className="dashboard-island__header">
+                  <div>
+                    <span className="home-panel__eyebrow">Agenda</span>
+                    <strong>Próximos eventos</strong>
+                  </div>
+                  <button type="button" className="dashboard-link-btn" onClick={() => navigate('/agenda')}>
+                    Ver todo →
+                  </button>
+                </div>
+                {upcomingEvents.length > 0 ? (
+                  <div className="dashboard-event-list">
+                    {upcomingEvents.map((event) => (
+                      <div key={event.id} className="dashboard-event-row">
+                        <span className="dashboard-event-dot" style={{ background: event.color || 'var(--primary)' }} />
+                        <div className="dashboard-event-info">
+                          <strong>{event.title}</strong>
+                          <span>{formatEventDate(event.start_datetime)} · {formatEventTime(event.start_datetime, event.all_day)}</span>
+                        </div>
                       </div>
-                      <span className="home-panel__counter">{actionableAcms.length}</span>
-                    </div>
-                    <div className="home-focus-list">
-                      {actionableAcms.slice(0, 3).map((acm) => {
-                        const status = statusMeta(acm)
-                        return (
-                          <button key={acm.id} type="button" className="home-focus-card" onClick={() => handleOpen(acm)}>
-                            <div className="home-focus-card__top">
-                              <div>
-                                <strong>{acm.nombre}</strong>
-                                <p>{acm.direccion}</p>
-                              </div>
-                              <span className={`kanban-card__status kanban-card__status--${status.tone}`}>{status.label}</span>
-                            </div>
-                            <div className="home-focus-card__meta">
-                              <span>{comparablesLabel(acm)}</span>
-                              <span>{stageProgress(acm)}</span>
-                              <span>Act. {formatDate(acm.updated_at || acm.fecha_creacion)}</span>
-                            </div>
-                          </button>
-                        )
-                      })}
-                      {actionableAcms.length === 0 && (
-                        <div className="kanban-empty">No hay casos urgentes en este momento.</div>
-                      )}
-                    </div>
-                  </article>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="dashboard-empty">
+                    <span>No hay eventos en los próximos 7 días.</span>
+                    <button type="button" className="dashboard-link-btn" onClick={() => navigate('/agenda')}>
+                      Ir a la agenda
+                    </button>
+                  </div>
+                )}
+              </section>
 
-                  <article className="home-panel home-panel--list">
-                    <div className="home-panel__header">
-                      <div>
-                        <span className="home-panel__eyebrow">Actividad</span>
-                        <strong>Últimos movimientos</strong>
-                      </div>
-                      <span className="home-panel__counter">{Math.min(recentAcms.length, 4)}</span>
+              {/* Island 3: Pending approvals (approver only) */}
+              {user?.is_approver && (
+                <section className="dashboard-island">
+                  <div className="dashboard-island__header">
+                    <div>
+                      <span className="home-panel__eyebrow">Revisiones</span>
+                      <strong>Aprobaciones pendientes</strong>
                     </div>
-                    <div className="home-activity-list">
-                      {recentAcms.slice(0, 4).map((acm) => (
+                    <button type="button" className="dashboard-link-btn" onClick={() => navigate('/approvals')}>
+                      Ver todo →
+                    </button>
+                  </div>
+                  {pendingApprovals.length > 0 ? (
+                    <div className="dashboard-approval-list">
+                      {pendingApprovals.slice(0, 3).map((acm) => (
                         <button
                           key={acm.id}
                           type="button"
-                          className="home-activity-row"
-                          onClick={() => handleOpen(acm)}
+                          className="dashboard-approval-row"
+                          onClick={() => navigate('/approvals')}
                         >
-                          <div>
+                          <div className="dashboard-approval-row__info">
                             <strong>{acm.nombre}</strong>
-                            <p>{stageProgress(acm)}</p>
+                            <span>{acm.owner_username || 'Sin asignar'} · {acm.cantidad_comparables || 0} comparables</span>
                           </div>
-                          <span>{formatDate(acm.updated_at || acm.fecha_creacion)}</span>
+                          <span className="kanban-card__status kanban-card__status--warning">Pendiente</span>
                         </button>
                       ))}
-                      {recentAcms.length === 0 && (
-                        <div className="kanban-empty">Todavía no hay actividad reciente.</div>
+                      {pendingApprovals.length > 3 && (
+                        <button type="button" className="dashboard-link-btn dashboard-link-btn--more" onClick={() => navigate('/approvals')}>
+                          +{pendingApprovals.length - 3} más pendientes
+                        </button>
                       )}
                     </div>
-                  </article>
-                </section>
-
-                <section className="home-panel home-panel--board">
-                  <div className="home-panel__header home-panel__header--board">
-                    <div>
-                      <span className="home-panel__eyebrow">Pipeline</span>
-                      <strong>Estado de tasaciones por etapa</strong>
-                      <p className="home-panel__description">Abrí una ficha o arrastrala para reorganizar el flujo de trabajo.</p>
+                  ) : (
+                    <div className="dashboard-empty">
+                      <span>No hay aprobaciones pendientes.</span>
                     </div>
-                  </div>
-
-                  <div className="kanban-board home-dashboard-board">
-                    {COLUMNS.map((column) => {
-                      const isDragTarget = dragOverCol === column.key
-                      const isCancelled = column.key === 'cancelado'
-                      return (
-                        <section
-                          key={column.key}
-                          className={`kanban-column kanban-column--${column.tone}${isDragTarget ? ' kanban-column--drop-target' : ''}${isCancelled ? ' kanban-column--cancelled' : ''}`}
-                          onDragOver={(e) => handleDragOver(e, column.key)}
-                          onDragLeave={handleDragLeave}
-                          onDrop={(e) => handleDrop(e, column.key)}
-                        >
-                          <div className="kanban-column__header">
-                            <div>
-                              <span className="kanban-column__eyebrow">Etapa</span>
-                              <h2>{column.title}</h2>
-                              <p>{column.description}</p>
-                            </div>
-                            <span>{grouped[column.key]?.length || 0}</span>
-                          </div>
-
-                          <div className="kanban-column__body">
-                            {(grouped[column.key] || []).map((acm) => {
-                              const isBeingDragged = draggedId === acm.id
-                              const status = statusMeta(acm)
-                              return (
-                                <article
-                                  key={acm.id}
-                                  className={`kanban-card${isCancelled ? ' kanban-card--cancelled' : ''}`}
-                                  draggable={!updatingId}
-                                  onDragStart={(e) => handleDragStart(e, acm)}
-                                  onDragEnd={handleDragEnd}
-                                  onClick={() => handleOpen(acm)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter' || e.key === ' ') {
-                                      e.preventDefault()
-                                      handleOpen(acm)
-                                    }
-                                  }}
-                                  tabIndex={0}
-                                  role="button"
-                                  style={{ opacity: isBeingDragged ? 0.4 : 1, cursor: 'grab' }}
-                                >
-                                  <div className="kanban-card__top">
-                                    <div>
-                                      <div className="kanban-card__title">{acm.nombre}</div>
-                                      <div className="kanban-card__address">{acm.direccion}</div>
-                                    </div>
-                                    <div className="kanban-card__top-actions">
-                                      <span
-                                        className={`kanban-card__signal kanban-card__signal--${status.tone}`}
-                                        title={status.hint}
-                                        aria-label={status.dotLabel}
-                                      >
-                                        <span className="kanban-card__signal-dot" aria-hidden="true" />
-                                        <span className="sr-only">{status.dotLabel}</span>
-                                      </span>
-                                      <div className="kanban-card__menu-wrap">
-                                        <button
-                                          type="button"
-                                          className="kanban-card__menu-trigger"
-                                          aria-label="Más acciones"
-                                          aria-expanded={openMenuId === acm.id}
-                                          onClick={(e) => {
-                                            e.stopPropagation()
-                                            setOpenMenuId((current) => current === acm.id ? null : acm.id)
-                                          }}
-                                          onMouseDown={(e) => e.stopPropagation()}
-                                        >
-                                          ⋯
-                                        </button>
-                                        {openMenuId === acm.id && (
-                                          <div className="kanban-card__menu" onClick={(e) => e.stopPropagation()}>
-                                            <button
-                                              type="button"
-                                              className="kanban-card__menu-item kanban-card__menu-item--danger"
-                                              onClick={() => handleDelete(acm.id, acm.nombre)}
-                                            >
-                                              Eliminar tasación
-                                            </button>
-                                          </div>
-                                        )}
-                                      </div>
-                                    </div>
-                                  </div>
-
-                                  <div className="kanban-card__meta">
-                                    <div className="kanban-card__owner">
-                                      <div
-                                        className="kanban-card__avatar"
-                                        style={{ background: avatarColor(acm.owner_username || acm.nombre) }}
-                                      >
-                                        {initials(acm.owner_username || acm.nombre)}
-                                      </div>
-                                      <span>{acm.owner_username || 'Sin asignar'}</span>
-                                    </div>
-                                    <span>Act. {formatDate(acm.updated_at || acm.fecha_creacion)}</span>
-                                  </div>
-
-                                  <div className="kanban-card__insights">
-                                    <span className="kanban-card__chip">{comparablesLabel(acm)}</span>
-                                    <span className="kanban-card__chip">{stageProgress(acm)}</span>
-                                  </div>
-
-                                  <div className="kanban-card__footer">
-                                    <div className="kanban-card__footer-note">
-                                      Abrí la ficha o arrastrá para mover de etapa.
-                                    </div>
-                                  </div>
-                                </article>
-                              )
-                            })}
-
-                            {(!grouped[column.key] || grouped[column.key].length === 0) && (
-                              <div className={`kanban-empty${isDragTarget ? ' kanban-empty--highlight' : ''}`}>
-                                {isDragTarget ? 'Soltá aquí para mover la tasación.' : 'Todavía no hay tasaciones en esta etapa.'}
-                              </div>
-                            )}
-                          </div>
-                        </section>
-                      )
-                    })}
-                  </div>
+                  )}
                 </section>
+              )}
             </div>
           </section>
         </>
