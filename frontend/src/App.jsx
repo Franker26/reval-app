@@ -13,6 +13,8 @@ import AgregarComparables from './pages/AgregarComparables.jsx'
 import AplicarPonderadores from './pages/AplicarPonderadores.jsx'
 import ResultadosDashboard from './pages/ResultadosDashboard.jsx'
 import ExportarPDF from './pages/ExportarPDF.jsx'
+import Pipeline from './pages/Pipeline.jsx'
+import Agenda from './pages/Agenda.jsx'
 import Home from './pages/Home.jsx'
 import Login from './pages/Login.jsx'
 import Settings from './pages/Settings.jsx'
@@ -309,6 +311,8 @@ function AppHeader() {
   const isHomeRoute = location.pathname === '/'
   const isApprovalsRoute = location.pathname === '/approvals'
   const isSettingsRoute = location.pathname === '/settings'
+  const isPipelineRoute = location.pathname === '/pipeline'
+  const isAgendaRoute = location.pathname.startsWith('/agenda')
   const isWorkflowRoute = location.pathname.startsWith('/acm/')
 
   const navItems = [
@@ -318,7 +322,7 @@ function AppHeader() {
   ].filter((item) => item.visible)
 
   return (
-    <header className={`app-header${isHomeRoute || isApprovalsRoute || isSettingsRoute || isWorkflowRoute ? ' app-header--workspace-hidden app-header--home-mobile-hidden' : ''}`}>
+    <header className={`app-header${isHomeRoute || isApprovalsRoute || isSettingsRoute || isPipelineRoute || isAgendaRoute || isWorkflowRoute ? ' app-header--workspace-hidden app-header--home-mobile-hidden' : ''}`}>
       <div className="app-header__shell">
         <div className="app-header__left">
           <Link to="/" className="app-title">
@@ -407,6 +411,8 @@ function AppRoutes() {
       <Route path="/acm/:id/step/3" element={<PrivateRoute><AplicarPonderadores /></PrivateRoute>} />
       <Route path="/acm/:id/step/4" element={<PrivateRoute><ResultadosDashboard /></PrivateRoute>} />
       <Route path="/acm/:id/step/5" element={<PrivateRoute><ExportarPDF /></PrivateRoute>} />
+      <Route path="/pipeline" element={<PrivateRoute><Pipeline /></PrivateRoute>} />
+      <Route path="/agenda" element={<PrivateRoute><Agenda /></PrivateRoute>} />
       <Route path="/approvals" element={<PrivateRoute><Approvals /></PrivateRoute>} />
       <Route path="/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
       <Route path="/admin" element={<AdminLogin />} />
@@ -420,13 +426,67 @@ function AppRoutes() {
   )
 }
 
+const SidebarIcons = {
+  dashboard: (
+    <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18" aria-hidden="true">
+      <rect x="2" y="2" width="7" height="7" rx="1.5" />
+      <rect x="11" y="2" width="7" height="7" rx="1.5" />
+      <rect x="2" y="11" width="7" height="7" rx="1.5" />
+      <rect x="11" y="11" width="7" height="7" rx="1.5" />
+    </svg>
+  ),
+  pipeline: (
+    <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18" aria-hidden="true">
+      <rect x="2" y="3" width="4" height="14" rx="1.5" />
+      <rect x="8" y="3" width="4" height="14" rx="1.5" />
+      <rect x="14" y="3" width="4" height="14" rx="1.5" />
+    </svg>
+  ),
+  agenda: (
+    <svg viewBox="0 0 20 20" fill="none" width="18" height="18" aria-hidden="true">
+      <rect x="3" y="4" width="14" height="13" rx="2.5" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M6.25 2.75v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M13.75 2.75v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M3.75 7.25h12.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  ),
+  revisiones: (
+    <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18" aria-hidden="true">
+      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+    </svg>
+  ),
+  settings: (
+    <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18" aria-hidden="true">
+      <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
+    </svg>
+  ),
+  logout: (
+    <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18" aria-hidden="true">
+      <path fillRule="evenodd" d="M3 4.75A1.75 1.75 0 014.75 3h5.5a.75.75 0 010 1.5h-5.5a.25.25 0 00-.25.25v10.5c0 .138.112.25.25.25h5.5a.75.75 0 010 1.5h-5.5A1.75 1.75 0 013 15.25V4.75z" clipRule="evenodd" />
+      <path fillRule="evenodd" d="M11.47 6.22a.75.75 0 011.06 0l3.25 3.25a.75.75 0 010 1.06l-3.25 3.25a.75.75 0 11-1.06-1.06l1.97-1.97H8.25a.75.75 0 010-1.5h5.19l-1.97-1.97a.75.75 0 010-1.06z" clipRule="evenodd" />
+    </svg>
+  ),
+  collapse: (
+    <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true">
+      <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
+    </svg>
+  ),
+  expand: (
+    <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true">
+      <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+    </svg>
+  ),
+}
+
 function WorkspaceSidebar() {
   const { user, logout } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
   const [logo, setLogo] = useState(() => getSavedLogo())
   const [appName, setAppName] = useState(() => getSavedAppName())
-  const [menuOpen, setMenuOpen] = useState(false)
+  const [collapsed, setCollapsed] = useState(() => {
+    try { return localStorage.getItem('sidebar_collapsed') === 'true' } catch { return false }
+  })
 
   useEffect(() => {
     function onStorage(e) {
@@ -446,37 +506,50 @@ function WorkspaceSidebar() {
     return () => window.removeEventListener('acm_theme_changed', onThemeChange)
   }, [])
 
-  useEffect(() => {
-    setMenuOpen(false)
-  }, [location.pathname])
+  function toggleCollapsed() {
+    setCollapsed((prev) => {
+      const next = !prev
+      try { localStorage.setItem('sidebar_collapsed', String(next)) } catch {}
+      return next
+    })
+  }
 
   const navItems = [
     {
       key: 'dashboard',
       label: 'Dashboard',
-      description: 'Tablero operativo de tasaciones',
-      note: 'Vista general',
+      hint: 'Resumen y actividad',
+      icon: SidebarIcons.dashboard,
       to: '/',
-      visible: true,
       active: location.pathname === '/',
+      visible: true,
     },
     {
-      key: 'approvals',
-      label: 'Aprobaciones',
-      description: 'Cola de revisión del equipo',
-      note: 'Pendientes y feedback',
-      to: '/approvals',
-      visible: user?.is_approver,
-      active: location.pathname.startsWith('/approvals'),
+      key: 'pipeline',
+      label: 'Pipeline',
+      hint: 'Tasaciones en curso',
+      icon: SidebarIcons.pipeline,
+      to: '/pipeline',
+      active: location.pathname === '/pipeline',
+      visible: true,
     },
     {
-      key: 'settings',
-      label: 'Configuración',
-      description: 'Marca, usuarios y preferencias',
-      note: 'Workspace',
-      to: '/settings',
+      key: 'agenda',
+      label: 'Agenda',
+      hint: 'Eventos y seguimiento',
+      icon: SidebarIcons.agenda,
+      to: '/agenda',
+      active: location.pathname.startsWith('/agenda'),
       visible: Boolean(user),
-      active: location.pathname.startsWith('/settings'),
+    },
+    {
+      key: 'revisiones',
+      label: 'Revisiones',
+      hint: 'Cola de aprobaciones',
+      icon: SidebarIcons.revisiones,
+      to: '/approvals',
+      active: location.pathname.startsWith('/approvals'),
+      visible: Boolean(user?.is_approver),
     },
   ].filter((item) => item.visible)
 
@@ -485,81 +558,117 @@ function WorkspaceSidebar() {
     navigate('/login')
   }
 
+  const settingsActive = location.pathname.startsWith('/settings')
+
   return (
-    <aside className="workspace-sidebar" aria-label="Navegación del workspace">
-      <section className="home-panel home-panel--brand">
-        <div className="home-workspace-card">
-          <span className="home-workspace-card__mark">
-            {logo ? (
-              <img src={logo} alt={`${appName} logo`} className="home-workspace-card__logo" />
-            ) : (
-              <span>{appName.slice(0, 1).toUpperCase()}</span>
+    <aside className={`workspace-sidebar${collapsed ? ' is-collapsed' : ''}`} aria-label="Navegación del workspace">
+      <div className="sidebar__inner">
+        <div className="sidebar__top">
+          <div className="sidebar__brand">
+            <span className="sidebar__brand-mark">
+              {logo ? (
+                <img src={logo} alt={`${appName} logo`} className="sidebar__brand-logo" />
+              ) : (
+                <span className="sidebar__brand-glyph">{appName.slice(0, 1).toUpperCase()}</span>
+              )}
+            </span>
+            {!collapsed && (
+              <div className="sidebar__brand-copy">
+                <strong className="sidebar__brand-name">{appName}</strong>
+                <span className="sidebar__brand-desc">{user?.is_admin ? 'Coordinación de equipo' : 'Workspace operativo'}</span>
+              </div>
             )}
-          </span>
-          <div>
-            <span className="home-panel__eyebrow">Workspace</span>
-            <strong>{appName}</strong>
-            <p>{user?.is_admin ? 'Vista de coordinación del equipo.' : 'Centro operativo personal.'}</p>
+            <button
+              type="button"
+              className="sidebar__toggle"
+              onClick={toggleCollapsed}
+              aria-label={collapsed ? 'Expandir sidebar' : 'Colapsar sidebar'}
+              title={collapsed ? 'Expandir' : 'Colapsar'}
+            >
+              {collapsed ? SidebarIcons.expand : SidebarIcons.collapse}
+            </button>
           </div>
+
+          {!collapsed && (
+            <div className="sidebar__context">
+              <span className="sidebar__context-eyebrow">Workspace</span>
+              <strong className="sidebar__context-title">Navegación central</strong>
+              <p className="sidebar__context-copy">Accesos principales, configuración operativa y estado de tu equipo en un solo lugar.</p>
+            </div>
+          )}
         </div>
 
-        <button
-          type="button"
-          className={`home-workspace-menu-toggle${menuOpen ? ' is-open' : ''}`}
-          aria-expanded={menuOpen}
-          aria-controls="workspace-nav-menu"
-          onClick={() => setMenuOpen((current) => !current)}
-        >
-          <span className="home-workspace-menu-toggle__copy">
-            <strong>Accesos</strong>
-            <small>Explorar workspace</small>
-          </span>
-          <span className="home-workspace-menu-toggle__chevron" aria-hidden="true">⌄</span>
-        </button>
-
-        <div
-          id="workspace-nav-menu"
-          className={`home-workspace-menu${menuOpen ? ' is-open' : ''}`}
-          aria-hidden={!menuOpen}
-        >
-          <div className="home-panel__header home-panel__header--menu">
-            <div>
-              <span className="home-panel__eyebrow">Navegación</span>
-              <strong>Accesos principales</strong>
-            </div>
-          </div>
-
-          <div className="home-rail-nav">
+        <div className="sidebar__section">
+          {!collapsed && <span className="sidebar__section-label">Principal</span>}
+          <nav className="sidebar__nav" aria-label="Secciones principales">
             {navItems.map((item) => (
               <button
                 key={item.key}
                 type="button"
-                className={`home-rail-nav__item${item.active ? ' is-active' : ''}`}
+                className={`sidebar__nav-item${item.active ? ' is-active' : ''}`}
                 onClick={() => navigate(item.to)}
+                title={collapsed ? item.label : undefined}
+                aria-label={item.label}
+                aria-current={item.active ? 'page' : undefined}
               >
-                <span>{item.label}</span>
-                <strong>{item.description}</strong>
-                <small>{item.note}</small>
+                <span className="sidebar__nav-icon">{item.icon}</span>
+                {!collapsed && (
+                  <span className="sidebar__nav-copy">
+                    <strong className="sidebar__nav-label">{item.label}</strong>
+                    <small className="sidebar__nav-hint">{item.hint}</small>
+                  </span>
+                )}
               </button>
             ))}
-          </div>
-
-          <div className="home-workspace-menu__footer">
-            <div className="home-user-card">
-              <div className="home-user-card__avatar" style={{ background: avatarColor(user?.username || 'Usuario') }}>
-                {initials(user?.username || 'Usuario')}
-              </div>
-              <div>
-                <strong>{user?.username || 'Usuario'}</strong>
-                <p>{userRoleLabel(user)}</p>
-              </div>
-            </div>
-            <button type="button" className="home-user-card__logout" onClick={handleLogout}>
-              Cerrar sesión
-            </button>
-          </div>
+          </nav>
         </div>
-      </section>
+
+        <div className="sidebar__spacer" />
+
+        <div className="sidebar__section sidebar__section--support">
+          {!collapsed && <span className="sidebar__section-label">Sistema</span>}
+          <button
+            type="button"
+            className={`sidebar__nav-item${settingsActive ? ' is-active' : ''}`}
+            onClick={() => navigate('/settings')}
+            title={collapsed ? 'Configuración' : undefined}
+            aria-label="Configuración"
+            aria-current={settingsActive ? 'page' : undefined}
+          >
+            <span className="sidebar__nav-icon">{SidebarIcons.settings}</span>
+            {!collapsed && (
+              <span className="sidebar__nav-copy">
+                <strong className="sidebar__nav-label">Configuración</strong>
+                <small className="sidebar__nav-hint">Marca, usuarios e integraciones</small>
+              </span>
+            )}
+          </button>
+        </div>
+
+        <div className="sidebar__footer">
+          <div className="sidebar__user" title={collapsed ? user?.username : undefined}>
+            <div className="sidebar__user-avatar" style={{ background: avatarColor(user?.username || 'Usuario') }}>
+              {initials(user?.username || 'Usuario')}
+            </div>
+            {!collapsed && (
+              <div className="sidebar__user-info">
+                <strong>{user?.username || 'Usuario'}</strong>
+                <span>{userRoleLabel(user)}</span>
+              </div>
+            )}
+          </div>
+          <button
+            type="button"
+            className={`sidebar__logout${collapsed ? ' is-icon-only' : ''}`}
+            onClick={handleLogout}
+            title={collapsed ? 'Salir' : undefined}
+            aria-label="Salir"
+          >
+            <span className="sidebar__nav-icon">{SidebarIcons.logout}</span>
+            {!collapsed && <span className="sidebar__logout-label">Salir</span>}
+          </button>
+        </div>
+      </div>
     </aside>
   )
 }
@@ -582,7 +691,7 @@ function AppShell() {
   }, [])
 
   const isWorkflowRoute = location.pathname.startsWith('/acm/')
-  const isWorkspaceRoute = location.pathname === '/' || location.pathname.startsWith('/approvals') || location.pathname.startsWith('/settings')
+  const isWorkspaceRoute = location.pathname === '/' || location.pathname === '/pipeline' || location.pathname.startsWith('/agenda') || location.pathname.startsWith('/approvals') || location.pathname.startsWith('/settings')
   const showWorkspaceSidebar = isWorkspaceRoute && !isWorkflowRoute && !isMobile
 
   return (
