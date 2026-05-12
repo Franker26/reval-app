@@ -76,6 +76,56 @@ function formatEventTime(value, allDay) {
   return new Date(value).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
 }
 
+function startOfHour(date) {
+  const next = new Date(date)
+  next.setMinutes(0, 0, 0)
+  return next
+}
+
+function DashboardPlaceholderStack({ variant = 'focus' }) {
+  const rows = variant === 'focus'
+    ? [
+        { title: 'Tasación Puerto Madero', meta: 'Carga y ajuste en curso', side: 'Pendiente', chips: ['3 comparables', 'Actualizado hoy'] },
+        { title: 'Tasación Palermo', meta: 'Documentación en revisión', side: 'En curso', chips: ['2 comparables', 'Seguimiento'] },
+      ]
+    : [
+        { title: 'Tasación Belgrano', meta: 'Analista senior · 4 comparables', side: 'Pendiente', chips: ['Revisión', 'Prioridad media'] },
+        { title: 'Tasación Núñez', meta: 'Broker interno · 2 comparables', side: 'Pendiente', chips: ['Cola', 'Siguiente'] },
+      ]
+
+  return (
+    <div className="dashboard-placeholder-stack" aria-hidden="true">
+      <div className="dashboard-placeholder-stack__rail">
+        {rows.map((row, index) => (
+          <div
+            key={`${variant}-${row.title}`}
+            className={`dashboard-placeholder-card${index === 1 ? ' is-secondary' : ''}`}
+          >
+            <div className="dashboard-placeholder-card__top">
+              <div className="dashboard-placeholder-card__copy">
+                <strong>{row.title}</strong>
+                <p>{row.meta}</p>
+              </div>
+              <span className="dashboard-placeholder-card__badge">{row.side}</span>
+            </div>
+            <div className="dashboard-placeholder-card__meta">
+              {row.chips.map((chip) => <span key={chip}>{chip}</span>)}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function isSameDay(dateA, dateB) {
+  return (
+    dateA.getFullYear() === dateB.getFullYear() &&
+    dateA.getMonth() === dateB.getMonth() &&
+    dateA.getDate() === dateB.getDate()
+  )
+}
+
 export default function Home() {
   const [acms, setAcms] = useState([])
   const [events, setEvents] = useState([])
@@ -167,6 +217,79 @@ export default function Home() {
       .sort((a, b) => new Date(a.start_datetime) - new Date(b.start_datetime))
       .slice(0, 4)
   }, [events])
+
+  const todayAgenda = useMemo(() => {
+    const now = new Date()
+    const todayEvents = [...events]
+      .filter((event) => isSameDay(new Date(event.start_datetime), now))
+      .sort((a, b) => new Date(a.start_datetime) - new Date(b.start_datetime))
+      .slice(0, 4)
+
+    return {
+      dateLabel: now.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      weekdayLabel: now.toLocaleDateString('es-AR', { weekday: 'long' }),
+      countLabel: `${todayEvents.length} evento${todayEvents.length === 1 ? '' : 's'}`,
+      events: todayEvents,
+    }
+  }, [events])
+
+  const todayTimeline = useMemo(() => {
+    const now = new Date()
+    const timelineStart = startOfHour(new Date(now.getTime() - 2 * 60 * 60 * 1000))
+    const slots = Array.from({ length: 5 }, (_, index) => {
+      const date = new Date(timelineStart.getTime() + index * 60 * 60 * 1000)
+      return {
+        key: date.toISOString(),
+        label: date.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }),
+        date,
+      }
+    })
+
+    const windowEnd = new Date(timelineStart.getTime() + 5 * 60 * 60 * 1000)
+    const visibleEvents = todayAgenda.events
+      .filter((event) => {
+        const start = new Date(event.start_datetime)
+        const end = new Date(event.end_datetime || event.start_datetime)
+        return end >= timelineStart && start <= windowEnd
+      })
+      .map((event) => {
+        const start = new Date(event.start_datetime)
+        const end = new Date(event.end_datetime || event.start_datetime)
+        const clampedStart = Math.max(start.getTime(), timelineStart.getTime())
+        const clampedEnd = Math.max(Math.min(end.getTime(), windowEnd.getTime()), clampedStart + 15 * 60 * 1000)
+        const range = windowEnd.getTime() - timelineStart.getTime()
+        return {
+          ...event,
+          top: ((clampedStart - timelineStart.getTime()) / range) * 100,
+          height: Math.max(((clampedEnd - clampedStart) / range) * 100, 8),
+        }
+      })
+
+    const nowOffset = Math.min(Math.max(((now.getTime() - timelineStart.getTime()) / (windowEnd.getTime() - timelineStart.getTime())) * 100, 0), 100)
+
+    return {
+      slots,
+      visibleEvents,
+      nowOffset,
+    }
+  }, [todayAgenda.events])
+
+  const desktopOverview = useMemo(() => {
+    const inFlight = stageCounts.nuevo + stageCounts.en_progreso
+    const approvalQueue = pendingApprovals.length
+    const completionRate = acms.length ? Math.round((stageCounts.finalizado / acms.length) * 100) : 0
+    return {
+      total: acms.length,
+      inFlight,
+      approvalQueue,
+      completionRate,
+    }
+  }, [acms.length, pendingApprovals.length, stageCounts])
+
+  const secondaryDesktopFeed = useMemo(() => {
+    if (user?.is_approver) return pendingApprovals.slice(0, 4)
+    return recentAcms.slice(0, 4)
+  }, [pendingApprovals, recentAcms, user?.is_approver])
 
   function handleNew() {
     dispatch({ type: 'RESET' })
@@ -517,112 +640,170 @@ export default function Home() {
 
           {/* ── Desktop dashboard ─────────────────────────────────────── */}
           <section className="home-desktop-shell" aria-label="Dashboard">
-            <div className="dashboard-header">
-              <div>
+            <header className="dashboard-hero">
+              <div className="dashboard-hero__copy">
                 <span className="home-panel__eyebrow">Dashboard</span>
                 <h1 className="dashboard-greeting">{greeting()}{user?.username ? `, ${user.username}` : ''}</h1>
+                <p>
+                  {desktopOverview.total > 0
+                    ? `Tenés ${desktopOverview.inFlight} tasaciones activas, ${stageCounts.finalizado} finalizadas y ${desktopOverview.approvalQueue} en revisión.`
+                    : 'Todavía no hay tasaciones cargadas. Podés crear la primera y empezar el flujo desde acá.'}
+                </p>
               </div>
-              <button type="button" className="btn btn-primary" onClick={handleNew}>
-                + Nueva tasación
-              </button>
-            </div>
+
+              <div className="dashboard-hero__actions">
+                <button type="button" className="btn btn-primary" onClick={handleNew}>
+                  + Nueva tasación
+                </button>
+                <button type="button" className="dashboard-secondary-btn" onClick={() => navigate('/pipeline')}>
+                  Ver pipeline
+                </button>
+              </div>
+
+              <div className="dashboard-overview-grid">
+                <article className="dashboard-overview-card">
+                  <span>ACMs activos</span>
+                  <strong>{desktopOverview.inFlight}</strong>
+                  <small>Nuevo + en progreso</small>
+                </article>
+                <article className="dashboard-overview-card">
+                  <span>Finalizadas</span>
+                  <strong>{stageCounts.finalizado}</strong>
+                  <small>{desktopOverview.completionRate}% del total</small>
+                </article>
+                <article className="dashboard-overview-card">
+                  <span>Revisión</span>
+                  <strong>{desktopOverview.approvalQueue}</strong>
+                  <small>{user?.is_approver ? 'Pendientes de aprobar' : 'Esperando respuesta'}</small>
+                </article>
+              </div>
+            </header>
 
             <div className="dashboard-grid">
-              {/* Island 1: KPIs by stage */}
-              <section className="dashboard-island dashboard-island--kpis">
-                <div className="dashboard-island__header">
-                  <span className="home-panel__eyebrow">Tasaciones</span>
-                  <strong>Estado del pipeline</strong>
+              <section className="dashboard-calendar-card">
+                <div className="dashboard-calendar-card__date">
+                  <strong>{todayAgenda.dateLabel}</strong>
+                  <span>{todayAgenda.weekdayLabel}</span>
+                  <small>{todayAgenda.countLabel}</small>
                 </div>
-                <div className="dashboard-kpi-grid">
-                  {COLUMNS.map((col) => (
-                    <button
-                      key={col.key}
-                      type="button"
-                      className={`dashboard-kpi-card dashboard-kpi-card--${col.tone}`}
-                      onClick={() => navigate('/pipeline')}
-                    >
-                      <span className="dashboard-kpi-card__value">{stageCounts[col.key]}</span>
-                      <span className="dashboard-kpi-card__label">{col.title}</span>
+                <div className="dashboard-calendar-card__events">
+                  <div className="dashboard-calendar-card__header">
+                    <span className="home-panel__eyebrow home-panel__eyebrow--light">Agenda</span>
+                    <button type="button" className="dashboard-link-btn dashboard-link-btn--calendar" onClick={() => navigate('/agenda')}>
+                      Ver agenda →
                     </button>
-                  ))}
-                </div>
-              </section>
-
-              {/* Island 2: Upcoming agenda events */}
-              <section className="dashboard-island">
-                <div className="dashboard-island__header">
-                  <div>
-                    <span className="home-panel__eyebrow">Agenda</span>
-                    <strong>Próximos eventos</strong>
                   </div>
-                  <button type="button" className="dashboard-link-btn" onClick={() => navigate('/agenda')}>
-                    Ver todo →
-                  </button>
-                </div>
-                {upcomingEvents.length > 0 ? (
-                  <div className="dashboard-event-list">
-                    {upcomingEvents.map((event) => (
-                      <div key={event.id} className="dashboard-event-row">
-                        <span className="dashboard-event-dot" style={{ background: event.color || 'var(--primary)' }} />
-                        <div className="dashboard-event-info">
-                          <strong>{event.title}</strong>
-                          <span>{formatEventDate(event.start_datetime)} · {formatEventTime(event.start_datetime, event.all_day)}</span>
+                  <div className="dashboard-timeline">
+                    <div className="dashboard-timeline__slots" aria-hidden="true">
+                      {todayTimeline.slots.map((slot) => (
+                        <div key={slot.key} className="dashboard-timeline__slot">
+                          <span>{slot.label}</span>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
+                    <div className="dashboard-timeline__track">
+                      {todayTimeline.slots.map((slot) => (
+                        <div key={slot.key} className="dashboard-timeline__line" />
+                      ))}
+                      <div className="dashboard-timeline__now" style={{ top: `${todayTimeline.nowOffset}%` }} />
+                      {todayTimeline.visibleEvents.map((event) => (
+                        <div
+                          key={event.id}
+                          className="dashboard-timeline__event"
+                          style={{
+                            top: `${event.top}%`,
+                            height: `${event.height}%`,
+                            borderColor: event.color || 'rgba(var(--primary-rgb), 0.24)',
+                            background: event.color ? `${event.color}18` : 'rgba(var(--primary-rgb), 0.08)',
+                          }}
+                        >
+                          <strong>{event.title}</strong>
+                          <span>{formatEventTime(event.start_datetime, event.all_day)}{event.all_day ? '' : ` - ${formatEventTime(event.end_datetime || event.start_datetime, false)}`}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                ) : (
-                  <div className="dashboard-empty">
-                    <span>No hay eventos en los próximos 7 días.</span>
-                    <button type="button" className="dashboard-link-btn" onClick={() => navigate('/agenda')}>
-                      Ir a la agenda
-                    </button>
-                  </div>
-                )}
+                </div>
               </section>
 
-              {/* Island 3: Pending approvals (approver only) */}
-              {user?.is_approver && (
-                <section className="dashboard-island">
-                  <div className="dashboard-island__header">
+              <div className="dashboard-grid__split">
+                <section className="dashboard-panel dashboard-panel--focus">
+                  <div className="dashboard-panel__header">
                     <div>
-                      <span className="home-panel__eyebrow">Revisiones</span>
-                      <strong>Aprobaciones pendientes</strong>
+                      <span className="home-panel__eyebrow">En foco</span>
+                      <strong>Casos para retomar hoy</strong>
                     </div>
-                    <button type="button" className="dashboard-link-btn" onClick={() => navigate('/approvals')}>
-                      Ver todo →
+                    <span className="dashboard-panel__meta">{actionableAcms.length} visibles</span>
+                  </div>
+                  {actionableAcms.length > 0 ? (
+                    <div className="dashboard-focus-list">
+                      {actionableAcms.map((acm) => {
+                        const status = statusMeta(acm)
+                        return (
+                          <button key={acm.id} type="button" className="dashboard-focus-card" onClick={() => handleOpen(acm)}>
+                            <div className="dashboard-focus-card__top">
+                              <div>
+                                <strong>{acm.nombre}</strong>
+                                <p>{acm.direccion}</p>
+                              </div>
+                              <span className={`kanban-card__status kanban-card__status--${status.tone}`}>{status.label}</span>
+                            </div>
+                            <div className="dashboard-focus-card__meta">
+                              <span>{stageProgress(acm)}</span>
+                              <span>{comparablesLabel(acm)}</span>
+                              <span>{formatDate(acm.updated_at || acm.fecha_creacion)}</span>
+                            </div>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <DashboardPlaceholderStack variant="focus" />
+                  )}
+                </section>
+
+                <section className="dashboard-panel">
+                  <div className="dashboard-panel__header">
+                    <div>
+                      <span className="home-panel__eyebrow">{user?.is_approver ? 'Revisiones' : 'Actividad'}</span>
+                      <strong>{user?.is_approver ? 'Cola de aprobaciones' : 'Últimas tasaciones actualizadas'}</strong>
+                    </div>
+                    <button
+                      type="button"
+                      className="dashboard-link-btn"
+                      onClick={() => navigate(user?.is_approver ? '/approvals' : '/pipeline')}
+                    >
+                      {user?.is_approver ? 'Ver todo →' : 'Abrir pipeline →'}
                     </button>
                   </div>
-                  {pendingApprovals.length > 0 ? (
+                  {secondaryDesktopFeed.length > 0 ? (
                     <div className="dashboard-approval-list">
-                      {pendingApprovals.slice(0, 3).map((acm) => (
+                      {secondaryDesktopFeed.map((acm) => (
                         <button
                           key={acm.id}
                           type="button"
                           className="dashboard-approval-row"
-                          onClick={() => navigate('/approvals')}
+                          onClick={() => (user?.is_approver ? navigate('/approvals') : handleOpen(acm))}
                         >
                           <div className="dashboard-approval-row__info">
                             <strong>{acm.nombre}</strong>
-                            <span>{acm.owner_username || 'Sin asignar'} · {acm.cantidad_comparables || 0} comparables</span>
+                            <span>
+                              {user?.is_approver
+                                ? `${acm.owner_username || 'Sin asignar'} · ${acm.cantidad_comparables || 0} comparables`
+                                : `${acm.owner_username || 'Sin asignar'} · ${formatDate(acm.updated_at || acm.fecha_creacion)}`}
+                            </span>
                           </div>
-                          <span className="kanban-card__status kanban-card__status--warning">Pendiente</span>
+                          <span className={`kanban-card__status kanban-card__status--${user?.is_approver ? 'warning' : statusMeta(acm).tone}`}>
+                            {user?.is_approver ? 'Pendiente' : statusMeta(acm).label}
+                          </span>
                         </button>
                       ))}
-                      {pendingApprovals.length > 3 && (
-                        <button type="button" className="dashboard-link-btn dashboard-link-btn--more" onClick={() => navigate('/approvals')}>
-                          +{pendingApprovals.length - 3} más pendientes
-                        </button>
-                      )}
                     </div>
                   ) : (
-                    <div className="dashboard-empty">
-                      <span>No hay aprobaciones pendientes.</span>
-                    </div>
+                    <DashboardPlaceholderStack variant="review" />
                   )}
                 </section>
-              )}
+              </div>
             </div>
           </section>
         </>
