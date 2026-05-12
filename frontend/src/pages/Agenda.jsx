@@ -58,6 +58,18 @@ function daysInMonth(year, month) {
   return new Date(year, month + 1, 0).getDate()
 }
 
+function monthMatrix(year, month) {
+  const firstDay = startOfMonth(year, month)
+  const start = startOfWeek(firstDay)
+  return Array.from({ length: 6 }, (_, weekIndex) => (
+    Array.from({ length: 7 }, (_, dayIndex) => {
+      const date = new Date(start)
+      date.setDate(start.getDate() + weekIndex * 7 + dayIndex)
+      return date
+    })
+  ))
+}
+
 function startOfWeek(date) {
   const next = new Date(date)
   next.setHours(0, 0, 0, 0)
@@ -70,6 +82,10 @@ function endOfWeek(date) {
   next.setDate(next.getDate() + 6)
   next.setHours(23, 59, 59, 999)
   return next
+}
+
+function startOfDay(date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0)
 }
 
 function isSameDay(a, b) {
@@ -118,6 +134,16 @@ function fmtDateTimeLong(value) {
     hour: '2-digit',
     minute: '2-digit',
   })
+}
+
+function monthEventRowStyle(color) {
+  const resolved = color || defaultColor()
+  const tint = /^#([0-9a-f]{6})$/i.test(resolved) ? `${resolved}18` : 'rgba(var(--primary-rgb), 0.1)'
+  return {
+    borderLeftColor: resolved,
+    background: tint,
+    color: '#18324f',
+  }
 }
 
 function recurrencePresetFromRule(rule = '') {
@@ -211,26 +237,13 @@ function upcomingEvent(events) {
     .sort((a, b) => new Date(a.start_datetime) - new Date(b.start_datetime))[0] || null
 }
 
-function AgendaEmptyState({ onCreate }) {
+function AgendaEmptyState() {
   return (
     <div className="agenda-empty-state">
       <span className="agenda-empty-state__eyebrow">Sin actividad visible</span>
       <h3>No hay eventos para este rango</h3>
       <p>Podés crear un nuevo evento, cambiar de vista o moverte a otra fecha para revisar la agenda del equipo.</p>
-      <button type="button" className="btn btn-primary" onClick={onCreate}>
-        + Nuevo evento
-      </button>
     </div>
-  )
-}
-
-function AgendaStat({ label, value, note, accent = 'default' }) {
-  return (
-    <article className={`agenda-stat agenda-stat--${accent}`}>
-      <span>{label}</span>
-      <strong>{value}</strong>
-      <small>{note}</small>
-    </article>
   )
 }
 
@@ -576,9 +589,22 @@ function MonthGrid({ year, month, events, onDayClick, onEventClick }) {
   const startWeekday = firstDay.getDay()
   const cells = []
   const today = new Date()
+  const trailingDays = (7 - ((startWeekday + totalDays) % 7)) % 7
 
-  for (let i = 0; i < startWeekday; i++) cells.push(null)
-  for (let day = 1; day <= totalDays; day++) cells.push(day)
+  for (let i = startWeekday - 1; i >= 0; i--) {
+    const date = new Date(year, month, -i)
+    cells.push({ date, day: date.getDate(), isOutside: true })
+  }
+
+  for (let day = 1; day <= totalDays; day++) {
+    const date = new Date(year, month, day)
+    cells.push({ date, day, isOutside: false })
+  }
+
+  for (let i = 1; i <= trailingDays; i++) {
+    const date = new Date(year, month + 1, i)
+    cells.push({ date, day: i, isOutside: true })
+  }
 
   return (
     <div className="agenda-month-grid">
@@ -589,29 +615,29 @@ function MonthGrid({ year, month, events, onDayClick, onEventClick }) {
       </div>
 
       <div className="agenda-month-cells">
-        {cells.map((day, index) => {
-          if (!day) return <div key={`empty-${index}`} className="agenda-month-cell agenda-month-cell--empty" />
-
-          const date = new Date(year, month, day)
+        {cells.map((cell) => {
+          const { date, day, isOutside } = cell
           const isToday = isSameDay(date, today)
           const dayEvents = events.filter((event) => eventIntersectsDay(event, date))
 
           return (
             <button
-              key={day}
+              key={date.toISOString()}
               type="button"
-              className={`agenda-month-cell${isToday ? ' agenda-month-cell--today' : ''}`}
+              className={`agenda-month-cell${isToday ? ' agenda-month-cell--today' : ''}${isOutside ? ' agenda-month-cell--outside' : ''}`}
               onClick={() => onDayClick(date)}
             >
-              <span className="agenda-month-cell__day">{day}</span>
+              <div className="agenda-month-cell__header">
+                <span className="agenda-month-cell__day">{day}</span>
+              </div>
 
               <div className="agenda-month-cell__events">
-                {dayEvents.slice(0, 3).map((event) => (
+                {dayEvents.slice(0, 6).map((event) => (
                   <button
                     key={event.id}
                     type="button"
                     className="agenda-event-pill"
-                    style={{ background: event.color || defaultColor() }}
+                    style={monthEventRowStyle(event.color)}
                     onClick={(ev) => {
                       ev.stopPropagation()
                       onEventClick(event)
@@ -623,8 +649,8 @@ function MonthGrid({ year, month, events, onDayClick, onEventClick }) {
                   </button>
                 ))}
 
-                {dayEvents.length > 3 ? (
-                  <span className="agenda-event-pill--more">+{dayEvents.length - 3} más</span>
+                {dayEvents.length > 6 ? (
+                  <span className="agenda-event-pill--more">+{dayEvents.length - 6} más</span>
                 ) : null}
               </div>
             </button>
@@ -636,53 +662,150 @@ function MonthGrid({ year, month, events, onDayClick, onEventClick }) {
 }
 
 function WeekView({ weekStart, events, onDayClick, onEventClick }) {
+  const START_HOUR = 6
+  const END_HOUR = 22
+  const totalMinutes = (END_HOUR - START_HOUR) * 60
   const today = new Date()
   const days = Array.from({ length: 7 }, (_, index) => {
     const day = new Date(weekStart)
     day.setDate(day.getDate() + index)
     return day
   })
+  const halfHourSlots = Array.from({ length: totalMinutes / 30 + 1 }, (_, index) => {
+    const minutes = START_HOUR * 60 + index * 30
+    const hour = Math.floor(minutes / 60)
+    const minute = minutes % 60
+    return {
+      label: `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`,
+      isMajor: minute === 0,
+      top: (index / (totalMinutes / 30)) * 100,
+    }
+  })
+  const currentWeekHasToday = days.some((day) => isSameDay(day, today))
+  const nowMinutes = (today.getHours() - START_HOUR) * 60 + today.getMinutes()
+  const showNowLine = currentWeekHasToday && nowMinutes >= 0 && nowMinutes <= totalMinutes
+  const nowLineTop = (nowMinutes / totalMinutes) * 100
+  const todayStart = startOfDay(today)
+  const solidDayCount = days.filter((date) => startOfDay(date).getTime() <= todayStart.getTime()).length
+  const solidWidth = (solidDayCount / 7) * 100
+
+  function mapTimedEvent(event, date) {
+    const eventStart = new Date(event.start_datetime)
+    const eventEnd = new Date(event.end_datetime || event.start_datetime)
+    const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate(), START_HOUR, 0, 0, 0)
+    const dayEnd = new Date(date.getFullYear(), date.getMonth(), date.getDate(), END_HOUR, 0, 0, 0)
+    const clampedStart = Math.max(eventStart.getTime(), dayStart.getTime())
+    const clampedEnd = Math.max(Math.min(eventEnd.getTime(), dayEnd.getTime()), clampedStart + 30 * 60 * 1000)
+    const startMinutes = (clampedStart - dayStart.getTime()) / (60 * 1000)
+    const endMinutes = (clampedEnd - dayStart.getTime()) / (60 * 1000)
+
+    return {
+      ...event,
+      top: (startMinutes / totalMinutes) * 100,
+      height: Math.max(((endMinutes - startMinutes) / totalMinutes) * 100, 7),
+    }
+  }
 
   return (
-    <div className="agenda-week-grid">
-      {days.map((date) => {
-        const dayEvents = events.filter((event) => eventIntersectsDay(event, date))
-        const isToday = isSameDay(date, today)
+    <div className="agenda-week-board">
+      <div className="agenda-week-board__header">
+        <div className="agenda-week-board__corner" />
+        {days.map((date) => {
+          const isToday = isSameDay(date, today)
+          const allDayCount = events.filter((event) => eventIntersectsDay(event, date) && event.all_day).length
+          return (
+            <button
+              key={`header-${date.toISOString()}`}
+              type="button"
+              className={`agenda-week-board__day-head${isToday ? ' is-today' : ''}`}
+              onClick={() => onDayClick(date)}
+            >
+              <span className="agenda-week-board__day-name">{DAYS_ES[date.getDay()]}</span>
+              <strong className="agenda-week-board__day-num">{date.getDate()}</strong>
+              <small>{allDayCount ? `${allDayCount} todo el día` : 'Disponible'}</small>
+            </button>
+          )
+        })}
+      </div>
 
-        return (
-          <button
-            key={date.toISOString()}
-            type="button"
-            className={`agenda-week-col${isToday ? ' agenda-week-col--today' : ''}`}
-            onClick={() => onDayClick(date)}
-          >
-            <div className="agenda-week-col__header">
-              <span className="agenda-week-col__day-name">{DAYS_ES[date.getDay()]}</span>
-              <span className={`agenda-week-col__day-num${isToday ? ' is-today' : ''}`}>{date.getDate()}</span>
+      <div className="agenda-week-board__body">
+        <div className="agenda-week-board__times" aria-hidden="true">
+          {halfHourSlots.map((slot) => (
+            <div key={slot.label} className={`agenda-week-board__time-slot${slot.isMajor ? ' is-major' : ' is-minor'}`}>
+              <span>{slot.label}</span>
             </div>
+          ))}
+        </div>
 
-            <div className="agenda-week-col__events">
-              {dayEvents.length ? dayEvents.map((event) => (
-                <button
-                  key={event.id}
-                  type="button"
-                  className="agenda-week-event"
-                  style={{ borderLeftColor: event.color || defaultColor() }}
-                  onClick={(ev) => {
-                    ev.stopPropagation()
+        <div className="agenda-week-board__columns">
+          {halfHourSlots.slice(0, -1).map((slot) => (
+            <div
+              key={`line-${slot.label}`}
+              className={`agenda-week-board__line${slot.isMajor ? ' is-major' : ' is-minor'}`}
+              style={{ top: `${slot.top}%` }}
+            />
+          ))}
+
+          {showNowLine && solidDayCount > 0 ? (
+            <div
+              className="agenda-week-board__now-range is-solid"
+              style={{ top: `${nowLineTop}%`, left: '0%', width: `${solidWidth}%` }}
+            />
+          ) : null}
+
+          {showNowLine && solidDayCount < 7 ? (
+            <div
+              className="agenda-week-board__now-range is-dashed"
+              style={{ top: `${nowLineTop}%`, left: `${solidWidth}%`, width: `${100 - solidWidth}%` }}
+            />
+          ) : null}
+
+          {days.map((date) => {
+            const dayEvents = events.filter((event) => eventIntersectsDay(event, date))
+            const timedEvents = dayEvents
+              .filter((event) => !event.all_day)
+              .map((event) => mapTimedEvent(event, date))
+            const isToday = isSameDay(date, today)
+
+            return (
+              <div
+                key={date.toISOString()}
+                className={`agenda-week-board__day-col${isToday ? ' is-today' : ''}`}
+                onClick={() => onDayClick(date)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    onDayClick(date)
+                  }
+                }}
+              >
+                {timedEvents.length ? timedEvents.map((event) => (
+                  <button
+                    key={event.id}
+                    type="button"
+                    className="agenda-week-block"
+                    style={{
+                      top: `${event.top}%`,
+                      height: `${event.height}%`,
+                      borderColor: event.color || defaultColor(),
+                      background: event.color ? `${event.color}18` : 'rgba(var(--primary-rgb), 0.08)',
+                    }}
+                    onClick={(ev) => {
+                      ev.stopPropagation()
                     onEventClick(event)
                   }}
                 >
-                  <span className="agenda-week-event__time">{eventTimeLabel(event)}</span>
-                  <span className="agenda-week-event__title">{event.title}</span>
+                  <strong>{event.title}</strong>
+                  <span>{eventTimeLabel(event)}</span>
                 </button>
-              )) : (
-                <span className="agenda-week-col__hint">Sin eventos</span>
-              )}
-            </div>
-          </button>
-        )
-      })}
+                )) : null}
+              </div>
+            )
+          })}
+        </div>
+      </div>
     </div>
   )
 }
@@ -737,12 +860,80 @@ function ListView({ events, onEventClick }) {
   )
 }
 
+function MiniMonthSidebar({ year, month, selectedDate, onSelectDate, branding, events, integrations }) {
+  const weeks = monthMatrix(year, month)
+  const monthLabel = `${MONTHS_ES[month]} ${year}`
+  const selectedWeekStart = selectedDate ? startOfWeek(selectedDate) : null
+  const selectedWeekEnd = selectedWeekStart ? endOfWeek(selectedDate) : null
+  const googleConnected = Boolean(integrations?.google?.connected)
+  const icalConnected = Boolean(integrations?.ical?.connected)
+  const calendarItems = [
+    { label: branding.app_name || 'Workspace', tone: 'workspace' },
+    ...(googleConnected ? [{ label: 'Google Calendar', tone: 'google' }] : []),
+    ...(icalConnected ? [{ label: 'Apple Calendar', tone: 'apple' }] : []),
+  ]
+  const visibleCount = events.length
+
+  return (
+    <aside className="agenda-teams-sidebar">
+      <div className="agenda-teams-sidebar__month">
+        <div className="agenda-teams-sidebar__month-header">
+          <strong>{monthLabel}</strong>
+        </div>
+        <div className="agenda-teams-sidebar__weekdays">
+          {['D', 'L', 'M', 'X', 'J', 'V', 'S'].map((day) => (
+            <span key={day}>{day}</span>
+          ))}
+        </div>
+        <div className="agenda-teams-sidebar__grid">
+          {weeks.flat().map((date) => {
+            const outside = date.getMonth() !== month
+            const selected = selectedDate && isSameDay(date, selectedDate)
+            const inSelectedWeek = selectedWeekStart && selectedWeekEnd && date >= selectedWeekStart && date <= selectedWeekEnd
+            const isWeekStart = inSelectedWeek && date.getDay() === 0
+            const isWeekEnd = inSelectedWeek && date.getDay() === 6
+            const today = isSameDay(date, new Date())
+            return (
+              <button
+                key={date.toISOString()}
+                type="button"
+                className={`agenda-teams-mini-day${outside ? ' is-outside' : ''}${selected ? ' is-selected' : ''}${today ? ' is-today' : ''}${inSelectedWeek ? ' is-in-week' : ''}${isWeekStart ? ' is-week-start' : ''}${isWeekEnd ? ' is-week-end' : ''}`}
+                onClick={() => onSelectDate(date)}
+              >
+                {date.getDate()}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      <div className="agenda-teams-sidebar__panel">
+        <span className="agenda-teams-sidebar__label">Calendarios</span>
+        <div className="agenda-teams-sidebar__list">
+          {calendarItems.map((item) => (
+            <div key={item.label} className="agenda-teams-sidebar__list-item">
+              <span className={`agenda-teams-sidebar__dot agenda-teams-sidebar__dot--${item.tone}`} />
+              <span>{item.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="agenda-teams-sidebar__panel">
+        <span className="agenda-teams-sidebar__label">Semana visible</span>
+        <strong className="agenda-teams-sidebar__metric">{visibleCount} eventos</strong>
+        <small>{visibleCount ? 'Eventos sincronizados en este rango.' : 'Sin actividad cargada en esta semana.'}</small>
+      </div>
+    </aside>
+  )
+}
+
 export default function Agenda() {
   const [searchParams] = useSearchParams()
   const today = new Date()
   const branding = getCachedBrandingPayload()
 
-  const [viewMode, setViewMode] = useState('month')
+  const [viewMode, setViewMode] = useState('week')
   const [currentYear, setCurrentYear] = useState(today.getFullYear())
   const [currentMonth, setCurrentMonth] = useState(today.getMonth())
   const [weekStartDate, setWeekStartDate] = useState(() => startOfWeek(today))
@@ -758,14 +949,12 @@ export default function Agenda() {
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
-  const [showIntegrations, setShowIntegrations] = useState(true)
   const [connectedProvider, setConnectedProvider] = useState(null)
 
   useEffect(() => {
     const provider = searchParams.get('connected')
     if (provider) {
       setConnectedProvider(provider)
-      setShowIntegrations(true)
     }
   }, [searchParams])
 
@@ -870,6 +1059,12 @@ export default function Agenda() {
     setWeekStartDate(startOfWeek(now))
   }
 
+  function handleMiniMonthSelect(date) {
+    syncMonthFromDate(date)
+    setWeekStartDate(startOfWeek(date))
+    setViewMode('week')
+  }
+
   function handleDayClick(date) {
     const { start, end } = buildDefaultWindow(date)
     setModal({
@@ -927,14 +1122,15 @@ export default function Agenda() {
   const googleConnected = Boolean(integrations?.google?.connected)
   const icalConnected = Boolean(integrations?.ical?.connected)
   const connectedCount = Number(googleConnected) + Number(icalConnected)
-  const anyAvailable = Boolean(available?.google || connectedCount)
+  const showIntegrationsPanel = Boolean(available?.google || connectedCount || connectedProvider)
 
   const periodLabel = viewMode === 'week'
     ? `${visibleRange.from.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })} – ${visibleRange.to.toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}`
     : `${MONTHS_ES[currentMonth]} ${currentYear}`
   const activeViewLabel = viewMode === 'month' ? 'Vista mensual' : viewMode === 'week' ? 'Vista semanal' : 'Vista en lista'
-  const nextEventLabel = nextEvent ? `${nextEvent.title} · ${fmtDateLong(nextEvent.start_datetime)}` : 'No hay próximos eventos'
-  const nextEventTime = nextEvent ? eventTimeLabel(nextEvent) : 'Sin próximos eventos'
+  const syncStatusLabel = connectedCount
+    ? `${connectedCount} integraci${connectedCount === 1 ? 'ón activa' : 'ones activas'}`
+    : 'Sin sincronizaciones activas'
 
   if (loading) {
     return (
@@ -959,11 +1155,6 @@ export default function Agenda() {
             <button type="button" className="btn btn-primary" onClick={() => setModal({ mode: 'create' })}>
               + Nuevo evento
             </button>
-            {anyAvailable ? (
-              <button type="button" className="btn btn-secondary" onClick={() => setShowIntegrations((current) => !current)}>
-                {showIntegrations ? 'Ocultar integraciones' : 'Ver integraciones'}
-              </button>
-            ) : null}
           </div>
         </div>
 
@@ -975,37 +1166,10 @@ export default function Agenda() {
           </div>
 
           <div className="agenda-hero-note agenda-hero-note--soft">
-            <span className="home-panel__eyebrow home-panel__eyebrow--light">Lectura rápida</span>
-            <p>{activeViewLabel} con {events.length} evento{events.length === 1 ? '' : 's'} en el rango visible y {connectedCount} integraci{connectedCount === 1 ? 'ón activa' : 'ones activas'}.</p>
+            <span className="home-panel__eyebrow home-panel__eyebrow--light">Operación</span>
+            <p>{activeViewLabel} con {events.length} evento{events.length === 1 ? '' : 's'} en pantalla, período {periodLabel.toLowerCase()} y {syncStatusLabel.toLowerCase()}.</p>
           </div>
         </div>
-      </section>
-
-      <section className="agenda-summary-grid">
-        <AgendaStat
-          label="Eventos visibles"
-          value={events.length}
-          note={viewMode === 'week' ? 'Semana actual en pantalla' : 'Rango cargado en agenda'}
-          accent="blue"
-        />
-        <AgendaStat
-          label="Próximo evento"
-          value={nextEvent ? fmtTimeDisplay(nextEvent.start_datetime) : '—'}
-          note={nextEventLabel}
-          accent="gold"
-        />
-        <AgendaStat
-          label="Vista activa"
-          value={viewMode === 'month' ? 'Mes' : viewMode === 'week' ? 'Semana' : 'Lista'}
-          note={periodLabel}
-          accent="violet"
-        />
-        <AgendaStat
-          label="Integraciones"
-          value={connectedCount}
-          note={connectedCount ? 'Calendarios conectados' : 'Sin proveedores activos'}
-          accent="green"
-        />
       </section>
 
       {error ? (
@@ -1038,43 +1202,6 @@ export default function Agenda() {
       ) : null}
 
       <div className="agenda-layout">
-        <aside className="agenda-sidebar">
-          <section className="agenda-side-card">
-            <div className="agenda-side-card__header">
-              <span className="home-panel__eyebrow">Contexto</span>
-              <strong>Ventana visible</strong>
-              <p>{periodLabel}</p>
-            </div>
-
-            <div className="agenda-side-card__body">
-              <div className="agenda-upcoming-card">
-                <span>Próximo bloque</span>
-                <strong>{nextEventTime}</strong>
-                <p>{nextEventLabel}</p>
-              </div>
-
-              <div className="agenda-side-list">
-                <div>
-                  <span>Vista</span>
-                  <strong>{activeViewLabel}</strong>
-                </div>
-                <div>
-                  <span>Rango</span>
-                  <strong>{events.length} evento{events.length === 1 ? '' : 's'}</strong>
-                </div>
-                <div>
-                  <span>Workspace</span>
-                  <strong>{branding.app_name || 'ACM Real Estate'}</strong>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {showIntegrations ? (
-            <IntegrationsPanel integrations={integrations} available={available} onRefresh={reloadIntegrations} />
-          ) : null}
-        </aside>
-
         <section className="agenda-main home-panel">
           <div className="agenda-main__header">
             <div className="agenda-main__heading">
@@ -1096,8 +1223,8 @@ export default function Agenda() {
 
               <div className="agenda-view-switcher">
                 {[
-                  { key: 'month', label: 'Mes' },
                   { key: 'week', label: 'Semana' },
+                  { key: 'month', label: 'Mes' },
                   { key: 'list', label: 'Lista' },
                 ].map((option) => (
                   <button
@@ -1113,34 +1240,50 @@ export default function Agenda() {
             </div>
           </div>
 
-          <div className="agenda-calendar-container">
-            {!events.length ? <AgendaEmptyState onCreate={() => setModal({ mode: 'create' })} /> : null}
+          <div className="agenda-teams-shell">
+            <MiniMonthSidebar
+              year={currentYear}
+              month={currentMonth}
+              selectedDate={weekStartDate}
+              onSelectDate={handleMiniMonthSelect}
+              branding={branding}
+              events={events}
+              integrations={integrations}
+            />
 
-            {viewMode === 'month' ? (
-              <MonthGrid
-                year={currentYear}
-                month={currentMonth}
-                events={events}
-                onDayClick={handleDayClick}
-                onEventClick={handleEventClick}
-              />
-            ) : null}
+            <div className="agenda-calendar-container agenda-calendar-container--teams">
+              {viewMode === 'week' ? (
+                <WeekView
+                  weekStart={weekStartDate}
+                  events={events}
+                  onDayClick={handleDayClick}
+                  onEventClick={handleEventClick}
+                />
+              ) : null}
 
-            {viewMode === 'week' ? (
-              <WeekView
-                weekStart={weekStartDate}
-                events={events}
-                onDayClick={handleDayClick}
-                onEventClick={handleEventClick}
-              />
-            ) : null}
+              {viewMode === 'month' ? (
+                <MonthGrid
+                  year={currentYear}
+                  month={currentMonth}
+                  events={events}
+                  onDayClick={handleDayClick}
+                  onEventClick={handleEventClick}
+                />
+              ) : null}
 
-            {viewMode === 'list' ? (
-              events.length ? <ListView events={events} onEventClick={handleEventClick} /> : null
-            ) : null}
+              {viewMode === 'list' ? (
+                events.length ? <ListView events={events} onEventClick={handleEventClick} /> : null
+              ) : null}
+            </div>
           </div>
         </section>
       </div>
+
+      {showIntegrationsPanel ? (
+        <div className="agenda-integrations-section">
+          <IntegrationsPanel integrations={integrations} available={available} onRefresh={reloadIntegrations} />
+        </div>
+      ) : null}
 
       {modal ? (
         <EventModal

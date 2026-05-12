@@ -312,6 +312,7 @@ function AppHeader() {
   const isApprovalsRoute = location.pathname === '/approvals'
   const isSettingsRoute = location.pathname === '/settings'
   const isPipelineRoute = location.pathname === '/pipeline'
+  const isAgendaRoute = location.pathname.startsWith('/agenda')
   const isWorkflowRoute = location.pathname.startsWith('/acm/')
 
   const navItems = [
@@ -321,7 +322,7 @@ function AppHeader() {
   ].filter((item) => item.visible)
 
   return (
-    <header className={`app-header${isHomeRoute || isApprovalsRoute || isSettingsRoute || isPipelineRoute || isWorkflowRoute ? ' app-header--workspace-hidden app-header--home-mobile-hidden' : ''}`}>
+    <header className={`app-header${isHomeRoute || isApprovalsRoute || isSettingsRoute || isPipelineRoute || isAgendaRoute || isWorkflowRoute ? ' app-header--workspace-hidden app-header--home-mobile-hidden' : ''}`}>
       <div className="app-header__shell">
         <div className="app-header__left">
           <Link to="/" className="app-title">
@@ -439,6 +440,14 @@ const SidebarIcons = {
       <rect x="2" y="3" width="4" height="14" rx="1.5" />
       <rect x="8" y="3" width="4" height="14" rx="1.5" />
       <rect x="14" y="3" width="4" height="14" rx="1.5" />
+    </svg>
+  ),
+  agenda: (
+    <svg viewBox="0 0 20 20" fill="none" width="18" height="18" aria-hidden="true">
+      <rect x="3" y="4" width="14" height="13" rx="2.5" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M6.25 2.75v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M13.75 2.75v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M3.75 7.25h12.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
     </svg>
   ),
   revisiones: (
@@ -682,7 +691,7 @@ function AppShell() {
   }, [])
 
   const isWorkflowRoute = location.pathname.startsWith('/acm/')
-  const isWorkspaceRoute = location.pathname === '/' || location.pathname === '/pipeline' || location.pathname.startsWith('/approvals') || location.pathname.startsWith('/settings')
+  const isWorkspaceRoute = location.pathname === '/' || location.pathname === '/pipeline' || location.pathname.startsWith('/agenda') || location.pathname.startsWith('/approvals') || location.pathname.startsWith('/settings')
   const showWorkspaceSidebar = isWorkspaceRoute && !isWorkflowRoute && !isMobile
 
   return (
