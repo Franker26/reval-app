@@ -92,3 +92,23 @@ export const listModifiers = () => request('GET', '/api/modifiers')
 export const createModifier = (data) => request('POST', '/api/modifiers', data)
 export const updateModifier = (id, data) => request('PUT', `/api/modifiers/${id}`, data)
 export const deleteModifier = (id) => request('DELETE', `/api/modifiers/${id}`)
+
+// --- Agenda ---
+export const listEvents = (from, to) => {
+  const params = new URLSearchParams()
+  if (from) params.set('from', from)
+  if (to) params.set('to', to)
+  const qs = params.toString()
+  return request('GET', `/api/agenda/events${qs ? `?${qs}` : ''}`)
+}
+export const createEvent = (data) => request('POST', '/api/agenda/events', data)
+export const updateEvent = (id, data) => request('PUT', `/api/agenda/events/${id}`, data)
+export const deleteEvent = (id) => request('DELETE', `/api/agenda/events/${id}`)
+
+export const listIntegrations = () => request('GET', '/api/agenda/integrations')
+export const getAvailableIntegrations = () => request('GET', '/api/agenda/integrations/available')
+export const createIcalFeed = () => request('POST', '/api/agenda/integrations/ical')
+export const deleteIcalFeed = () => request('DELETE', '/api/agenda/integrations/ical')
+export const getGoogleAuthUrl = () => request('GET', '/api/agenda/integrations/google/auth')
+export const syncGoogle = () => request('POST', '/api/agenda/integrations/google/sync')
+export const disconnectGoogle = () => request('DELETE', '/api/agenda/integrations/google')
