@@ -6,6 +6,7 @@ class ModuleRegistry {
   #installed = new Set()
   #slots = new Map()
   #listeners = new Set()
+  #version = 0
 
   #notify() {
     for (const fn of this.#listeners) fn()
@@ -14,6 +15,7 @@ class ModuleRegistry {
   // Called after login with the list of installed module IDs for the company.
   hydrate(installedIds = []) {
     this.#installed = new Set(installedIds)
+    this.#version++
     this.#notify()
   }
 
@@ -67,7 +69,7 @@ class ModuleRegistry {
   }
 
   getSnapshot() {
-    return this.#installed
+    return this.#version
   }
 }
 
