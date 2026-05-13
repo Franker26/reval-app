@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from starlette.requests import Request
 
 from core.auth import current_user, require_admin, require_superadmin
 from core.db import get_db
-from models import Company, CompanyModule, CompanyModuleUnlock
+from models import Company, CompanyModule, CompanyModuleUnlock, ModuleUnlockRequest
 
 router = APIRouter()
 
@@ -81,8 +82,13 @@ def request_unlock(module_id: str, request: Request, db: Session = Depends(get_d
     unlocked = _get_unlocked_ids(db, admin.company_id)
     if module_id in unlocked:
         raise HTTPException(409, "El módulo ya está desbloqueado")
-    # Stub: in production this would create a support ticket or notify the superadmin.
-    return {"module_id": module_id, "requested": True}
+    db.add(ModuleUnlockRequest(company_id=admin.company_id, module_id=module_id))
+    db.commit()
+    count = db.query(ModuleUnlockRequest).filter(
+        ModuleUnlockRequest.company_id == admin.company_id,
+        ModuleUnlockRequest.module_id == module_id,
+    ).count()
+    return {"module_id": module_id, "requested": True, "request_count": count}
 
 
 # ── Superadmin endpoints ──────────────────────────────────────────────────────
@@ -101,6 +107,11 @@ def unlock_module(company_id: int, module_id: str, request: Request, db: Session
     if already:
         raise HTTPException(409, "El módulo ya está desbloqueado para esta empresa")
     db.add(CompanyModuleUnlock(company_id=company_id, module_id=module_id))
+    # Clear pending requests once superadmin grants access
+    db.query(ModuleUnlockRequest).filter(
+        ModuleUnlockRequest.company_id == company_id,
+        ModuleUnlockRequest.module_id == module_id,
+    ).delete()
     db.commit()
     return {"company_id": company_id, "module_id": module_id, "unlocked": True}
 
@@ -133,8 +144,22 @@ def list_company_modules(company_id: int, request: Request, db: Session = Depend
         raise HTTPException(404, "Empresa no encontrada")
     unlocked = _get_unlocked_ids(db, company_id)
     installed = _get_installed_ids(db, company_id)
-    return {
-        "all": ALL_MODULE_IDS,
-        "unlocked": unlocked,
-        "installed": installed,
-    }
+    # Count pending unlock requests per module
+    pending: dict[str, int] = {}
+    rows = (
+        db.query(ModuleUnlockRequest.module_id, func.count(ModuleUnlockRequest.id))
+        .filter(ModuleUnlockRequest.company_id == company_id)
+        .group_by(ModuleUnlockRequest.module_id)
+        .all()
+    )
+    for module_id, cnt in rows:
+        pending[module_id] = cnt
+    modules = []
+    for mid in ALL_MODULE_IDS:
+        modules.append({
+            "id": mid,
+            "unlocked": mid in unlocked,
+            "installed": mid in installed,
+            "pending_requests": pending.get(mid, 0),
+        })
+    return {"modules": modules}

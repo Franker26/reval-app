@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react'
 import {
   adminCheckIntegrationStatus,
+  adminGetCalendarSettings,
   adminGetIntegrationSettings,
+  adminUpdateCalendarSettings,
   adminUpdateIntegrationSettings,
 } from '../../adminApi.js'
 import { LoadingState } from '../../components/StatusState.jsx'
@@ -39,6 +41,149 @@ function ServerStatus({ label, info }) {
       <span style={{ color: info.connected ? 'var(--color-success, #1a8a4a)' : '#c00', fontSize: '0.82rem' }}>
         {info.connected ? 'Conectado' : 'Sin conexión'}
       </span>
+    </div>
+  )
+}
+
+const CAL_EMPTY = {
+  google_client_id: '',
+  google_client_secret: '',
+  microsoft_client_id: '',
+  microsoft_client_secret: '',
+  ical_base_url: '',
+}
+
+function CalendarSyncCard() {
+  const [settings, setSettings] = useState(CAL_EMPTY)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+  const [success, setSuccess] = useState(null)
+
+  useEffect(() => {
+    adminGetCalendarSettings()
+      .then((data) => setSettings({
+        google_client_id: data.google_client_id || '',
+        google_client_secret: data.google_client_secret || '',
+        microsoft_client_id: data.microsoft_client_id || '',
+        microsoft_client_secret: data.microsoft_client_secret || '',
+        ical_base_url: data.ical_base_url || '',
+      }))
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false))
+  }, [])
+
+  function set(key, value) {
+    setSettings((prev) => ({ ...prev, [key]: value }))
+    setSuccess(null)
+  }
+
+  async function handleSave(e) {
+    e.preventDefault()
+    setSaving(true)
+    setError(null)
+    setSuccess(null)
+    try {
+      const payload = {
+        google_client_id: settings.google_client_id.trim() || null,
+        google_client_secret: settings.google_client_secret === '***' ? '***' : (settings.google_client_secret.trim() || null),
+        microsoft_client_id: settings.microsoft_client_id.trim() || null,
+        microsoft_client_secret: settings.microsoft_client_secret === '***' ? '***' : (settings.microsoft_client_secret.trim() || null),
+        ical_base_url: settings.ical_base_url.trim() || null,
+      }
+      await adminUpdateCalendarSettings(payload)
+      setSuccess('Configuración guardada.')
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="admin-card" style={{ maxWidth: 640, marginTop: '1.5rem' }}>
+      <h2 className="admin-card__title">Sincronización de calendario</h2>
+      <p className="admin-card__desc">
+        Credenciales OAuth para que los usuarios puedan conectar Google Calendar y Microsoft Outlook.
+        La URL base de iCal se usa para generar los enlaces de exportación de agenda.
+      </p>
+
+      {loading ? (
+        <LoadingState
+          eyebrow="Admin"
+          title="Cargando configuración de calendario"
+          subtitle=""
+          messages={['Cargando...']}
+          mode="inline"
+        />
+      ) : (
+        <form onSubmit={handleSave} className="admin-form">
+          <p className="admin-form__section-label">Google Calendar</p>
+          <div className="admin-form__field">
+            <label className="admin-form__label">Client ID</label>
+            <input
+              className="admin-input"
+              type="text"
+              placeholder="xxx.apps.googleusercontent.com"
+              value={settings.google_client_id}
+              onChange={(e) => set('google_client_id', e.target.value)}
+            />
+          </div>
+          <div className="admin-form__field">
+            <label className="admin-form__label">Client Secret</label>
+            <input
+              className="admin-input"
+              type="password"
+              placeholder={settings.google_client_secret === '***' ? '(guardado)' : 'GOCSPX-...'}
+              value={settings.google_client_secret === '***' ? '' : settings.google_client_secret}
+              onChange={(e) => set('google_client_secret', e.target.value)}
+            />
+          </div>
+
+          <p className="admin-form__section-label" style={{ marginTop: '1.25rem' }}>Microsoft Outlook</p>
+          <div className="admin-form__field">
+            <label className="admin-form__label">Client ID</label>
+            <input
+              className="admin-input"
+              type="text"
+              placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+              value={settings.microsoft_client_id}
+              onChange={(e) => set('microsoft_client_id', e.target.value)}
+            />
+          </div>
+          <div className="admin-form__field">
+            <label className="admin-form__label">Client Secret</label>
+            <input
+              className="admin-input"
+              type="password"
+              placeholder={settings.microsoft_client_secret === '***' ? '(guardado)' : 'Valor del secreto de cliente'}
+              value={settings.microsoft_client_secret === '***' ? '' : settings.microsoft_client_secret}
+              onChange={(e) => set('microsoft_client_secret', e.target.value)}
+            />
+          </div>
+
+          <p className="admin-form__section-label" style={{ marginTop: '1.25rem' }}>iCal</p>
+          <div className="admin-form__field">
+            <label className="admin-form__label">URL base de la plataforma</label>
+            <input
+              className="admin-input"
+              type="url"
+              placeholder="https://tuapp.com"
+              value={settings.ical_base_url}
+              onChange={(e) => set('ical_base_url', e.target.value)}
+            />
+          </div>
+
+          {error && <InlineNotice tone="error" title="No pudimos guardar" description={error} className="notice--spaced" compact />}
+          {success && <InlineNotice tone="success" title="Configuración actualizada" description={success} className="notice--spaced" compact />}
+
+          <div className="admin-form__actions">
+            <button type="submit" className="admin-btn" disabled={saving}>
+              {saving ? 'Guardando…' : 'Guardar'}
+            </button>
+          </div>
+        </form>
+      )}
     </div>
   )
 }
@@ -116,7 +261,9 @@ export default function AdminSettings() {
         <h1>Configuración de la plataforma</h1>
       </div>
 
-      <div className="admin-card" style={{ maxWidth: 640 }}>
+      <CalendarSyncCard />
+
+      <div className="admin-card" style={{ maxWidth: 640, marginTop: '1.5rem' }}>
         <h2 className="admin-card__title">Microservicio scraper</h2>
         <p className="admin-card__desc">
           Zonaprop, Argenprop y MercadoLibre usan este servicio centralizado.

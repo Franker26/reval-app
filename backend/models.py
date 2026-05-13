@@ -310,3 +310,15 @@ class CompanyModule(Base):
     installed_at = Column(DateTime, default=datetime.utcnow)
 
     company = relationship("Company")
+
+
+class ModuleUnlockRequest(Base):
+    """Each row = one unlock request from a company admin to the superadmin."""
+    __tablename__ = "module_unlock_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False)
+    module_id = Column(String, nullable=False)
+    requested_at = Column(DateTime, default=datetime.utcnow)
+
+    company = relationship("Company")

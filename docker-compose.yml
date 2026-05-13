@@ -1,16 +1,24 @@
 services:
   backend:
     build: ./backend
-    network_mode: host
+    expose:
+      - "8000"
     volumes:
       - acm-data:/data
+    env_file:
+      - ./backend/.env
     environment:
-      - CORS_ORIGINS=http://localhost:5173,http://localhost:80,http://localhost
+      - CORS_ORIGINS=http://localhost
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        - VITE_API_URL=
     ports:
       - "80:80"
+    depends_on:
+      - backend
 
 volumes:
   acm-data:

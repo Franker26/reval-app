@@ -10,6 +10,7 @@ from starlette.requests import Request
 from core.auth import create_token, hash_password, require_superadmin, verify_password
 from core.db import get_db
 from core.utils import (
+    get_platform_setting,
     get_scraper_settings,
     save_platform_setting,
     serialize_user,
@@ -34,6 +35,14 @@ class GlobalIntegrationSettings(BaseModel):
     scraper_service_token: Optional[str] = None
     scraper_service_url_backup: Optional[str] = None
     scraper_service_token_backup: Optional[str] = None
+
+
+class CalendarSyncSettings(BaseModel):
+    google_client_id: Optional[str] = None
+    google_client_secret: Optional[str] = None
+    microsoft_client_id: Optional[str] = None
+    microsoft_client_secret: Optional[str] = None
+    ical_base_url: Optional[str] = None
 
 
 def _requires_approval_check(acm: ACM) -> bool:
@@ -263,3 +272,34 @@ async def admin_integration_status(request: Request, db: Session = Depends(get_d
         "backup": {"url": backup_url or None, "connected": backup_ok},
         "sources": ["zonaprop", "argenprop", "mercadolibre"],
     }
+
+
+# ── Calendar sync settings ────────────────────────────────────────────────────
+
+_CAL_KEYS = ["google_client_id", "google_client_secret", "microsoft_client_id", "microsoft_client_secret", "ical_base_url"]
+
+
+@router.get("/api/admin/settings/calendar")
+def admin_get_calendar_settings(request: Request, db: Session = Depends(get_db)):
+    require_superadmin(request, db)
+    def _masked(key: str) -> Optional[str]:
+        val = get_platform_setting(db, f"cal_{key}")
+        if val is None:
+            return None
+        if key.endswith("_secret"):
+            return "***"
+        return val
+    return {k: _masked(k) for k in _CAL_KEYS}
+
+
+@router.put("/api/admin/settings/calendar")
+def admin_update_calendar_settings(body: CalendarSyncSettings, request: Request, db: Session = Depends(get_db)):
+    require_superadmin(request, db)
+    data = body.model_dump()
+    for key, value in data.items():
+        if value is None:
+            continue
+        if value == "***":
+            continue
+        save_platform_setting(db, f"cal_{key}", value.strip())
+    return admin_get_calendar_settings(request, db)
