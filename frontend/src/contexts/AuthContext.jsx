@@ -3,9 +3,11 @@ import { Navigate } from 'react-router-dom'
 import { getCurrentUser, loginUser } from '../api.js'
 import { registry } from '../framework/ModuleRegistry.js'
 
+const _API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
+
 async function _hydrateModules() {
   try {
-    const res = await fetch('/api/modules', {
+    const res = await fetch(`${_API_BASE}/api/modules`, {
       headers: { Authorization: `Bearer ${localStorage.getItem('acm_token')}` },
     })
     if (res.ok) {
