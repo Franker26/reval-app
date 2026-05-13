@@ -3,24 +3,10 @@ import { useNavigate } from 'react-router-dom'
 import { deleteACM, listACMs, updateACM } from '../api.js'
 import { useAuth, useConfirm, useWizard } from '../App.jsx'
 import { LoadingState, StateCard } from '../components/StatusState.jsx'
+import { avatarColor, initials } from '../utils/avatars.js'
+import { ACM_STAGES } from '../constants/status.js'
 
-const COLUMNS = [
-  { key: 'nuevo', title: 'Nuevo', description: 'Tasaciones recién creadas o pendientes de completar.', tone: 'blue' },
-  { key: 'en_progreso', title: 'En progreso', description: 'Trabajos con comparables o ajustes en análisis.', tone: 'violet' },
-  { key: 'finalizado', title: 'Finalizado', description: 'Tasaciones listas para exportar o compartir.', tone: 'green' },
-  { key: 'cancelado', title: 'Cancelado', description: 'Análisis descartados o pausados.', tone: 'slate' },
-]
-
-function initials(name = '') {
-  return name.slice(0, 2).toUpperCase() || 'AC'
-}
-
-function avatarColor(seed = '') {
-  let hash = 0
-  for (const char of seed) hash = char.charCodeAt(0) + ((hash << 5) - hash)
-  const hue = Math.abs(hash) % 360
-  return `hsl(${hue}, 55%, 46%)`
-}
+const COLUMNS = ACM_STAGES
 
 function statusLabel(acm) {
   if (!acm.requires_approval) return 'Sin aprobación'

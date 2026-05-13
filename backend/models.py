@@ -286,3 +286,27 @@ class UserCalendarIntegration(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     user = relationship("User")
+
+
+class CompanyModuleUnlock(Base):
+    """Superadmin unlocks a module for a company."""
+    __tablename__ = "company_module_unlocks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False)
+    module_id = Column(String, nullable=False)
+    unlocked_at = Column(DateTime, default=datetime.utcnow)
+
+    company = relationship("Company")
+
+
+class CompanyModule(Base):
+    """Company admin installs an unlocked module."""
+    __tablename__ = "company_modules"
+
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False)
+    module_id = Column(String, nullable=False)
+    installed_at = Column(DateTime, default=datetime.utcnow)
+
+    company = relationship("Company")

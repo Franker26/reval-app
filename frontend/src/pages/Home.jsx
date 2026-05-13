@@ -3,24 +3,10 @@ import { useNavigate } from 'react-router-dom'
 import { deleteACM, listACMs, listEvents, listPendingApprovals, updateACM } from '../api.js'
 import { useAuth, useConfirm, useWizard } from '../App.jsx'
 import { LoadingState, MobileWorkspaceLoading, StateCard } from '../components/StatusState.jsx'
+import { avatarColor, initials } from '../utils/avatars.js'
+import { ACM_STAGES } from '../constants/status.js'
 
-const COLUMNS = [
-  { key: 'nuevo', title: 'Nuevo', tone: 'blue' },
-  { key: 'en_progreso', title: 'En progreso', tone: 'violet' },
-  { key: 'finalizado', title: 'Finalizado', tone: 'green' },
-  { key: 'cancelado', title: 'Cancelado', tone: 'slate' },
-]
-
-function initials(name = '') {
-  return name.slice(0, 2).toUpperCase() || 'AC'
-}
-
-function avatarColor(seed = '') {
-  let hash = 0
-  for (const char of seed) hash = char.charCodeAt(0) + ((hash << 5) - hash)
-  const hue = Math.abs(hash) % 360
-  return `hsl(${hue}, 55%, 46%)`
-}
+const COLUMNS = ACM_STAGES
 
 function statusLabel(acm) {
   if (!acm.requires_approval) return 'Sin aprobación'
