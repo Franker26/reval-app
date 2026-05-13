@@ -123,18 +123,8 @@ export default function WorkspaceSidebar() {
       icon: SidebarIcons.dashboard,
       to: '/',
       active: location.pathname === '/',
-      visible: true,
     },
-    {
-      key: 'pipeline',
-      label: 'Pipeline',
-      hint: 'Tasaciones en curso',
-      icon: SidebarIcons.pipeline,
-      to: '/pipeline',
-      active: location.pathname === '/pipeline',
-      visible: true,
-    },
-  ].filter((item) => item.visible)
+  ]
 
   const appItems = registry.getNavItems(user).map((item) => ({
     key: item.key,

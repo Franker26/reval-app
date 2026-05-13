@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { useAuth } from '../App.jsx'
+import { useAuth } from '../contexts/AuthContext.jsx'
 import { avatarColor, initials } from '../utils/avatars.js'
+import { useModules } from '../framework/useModules.js'
 import UsersPanel from './settings/UsersPanel.jsx'
 import ThemePanel from './settings/ThemePanel.jsx'
 import MapPanel from './settings/MapPanel.jsx'
@@ -13,6 +14,10 @@ export default function Settings() {
   const { user, refreshUser, logout } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
+  const registry = useModules()
+  const hasOSM = registry.isInstalled('int-osm')
+  const hasIntegrations = registry.isInstalled('acm-integrations')
+  const hasACM = registry.isInstalled('acm-core')
   const debugMode = new URLSearchParams(location.search).get('debug') === '1'
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof window === 'undefined') return false
@@ -37,10 +42,10 @@ export default function Settings() {
 
   const sidebarMap = {
     config: [
-      { key: 'mapa', label: 'OpenStreetMap' },
+      hasOSM ? { key: 'mapa', label: 'OpenStreetMap' } : null,
       user?.is_admin ? { key: 'personalizacion', label: 'Personalización' } : null,
-      user?.is_admin ? { key: 'integraciones', label: 'Estado de integraciones' } : null,
-      user?.is_admin ? { key: 'modificadores', label: 'Modificadores' } : null,
+      (user?.is_admin && hasIntegrations) ? { key: 'integraciones', label: 'Estado de integraciones' } : null,
+      (user?.is_admin && hasACM) ? { key: 'modificadores', label: 'Modificadores' } : null,
     ].filter(Boolean),
     usuarios: [
       { key: 'equipo', label: 'Equipo' },
