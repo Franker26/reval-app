@@ -7,6 +7,9 @@ import {
   adminGetCompany,
   adminListAcms,
   adminListUsers,
+  adminLockModule,
+  adminUnlockModule,
+  adminListCompanyModules,
   adminUpdateCompany,
   adminUpdateUser,
 } from '../../adminApi.js'
@@ -210,6 +213,89 @@ function UsersSection({ companyId }) {
   )
 }
 
+const MODULE_LABELS = {
+  'acm-core': { name: 'Creador de ACMs', desc: 'Pipeline de tasaciones, ponderadores y exportación PDF' },
+  'agenda': { name: 'Agenda', desc: 'Calendario de eventos y citas del equipo' },
+  'acm-reviews': { name: 'Revisiones de ACMs', desc: 'Flujo de aprobación de tasaciones' },
+  'acm-integrations': { name: 'ACM ↔ Integraciones', desc: 'Extracción de URLs de portales inmobiliarios' },
+  'int-meli': { name: 'MercadoLibre', desc: 'Integración con portal MercadoLibre' },
+  'int-zonaprop': { name: 'Zonaprop', desc: 'Integración con portal Zonaprop' },
+  'int-argenprop': { name: 'ArgenProp', desc: 'Integración con portal ArgenProp' },
+  'int-osm': { name: 'OpenStreetMap', desc: 'Mapa interactivo en la app' },
+}
+
+function ModulesSection({ companyId }) {
+  const [modules, setModules] = useState([])
+  const [error, setError] = useState(null)
+  const [toggling, setToggling] = useState({})
+
+  useEffect(() => {
+    adminListCompanyModules(companyId)
+      .then((data) => setModules(data.modules || []))
+      .catch((e) => setError(e.message))
+  }, [companyId])
+
+  async function handleToggle(mod) {
+    setToggling((prev) => ({ ...prev, [mod.id]: true }))
+    setError(null)
+    try {
+      if (mod.unlocked) {
+        await adminLockModule(companyId, mod.id)
+        setModules((prev) => prev.map((m) => m.id === mod.id ? { ...m, unlocked: false, installed: false } : m))
+      } else {
+        await adminUnlockModule(companyId, mod.id)
+        setModules((prev) => prev.map((m) => m.id === mod.id ? { ...m, unlocked: true } : m))
+      }
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setToggling((prev) => ({ ...prev, [mod.id]: false }))
+    }
+  }
+
+  return (
+    <div className="admin-section">
+      <div className="admin-section-header">
+        <h2>Módulos ({modules.filter((m) => m.unlocked).length} / {modules.length} activos)</h2>
+      </div>
+
+      {error && <InlineNotice tone="error" title="Error al actualizar módulos" description={error} className="notice--spaced" />}
+
+      <div className="admin-modules-grid">
+        {modules.map((mod) => {
+          const info = MODULE_LABELS[mod.id] || { name: mod.id, desc: '' }
+          const busy = toggling[mod.id]
+          return (
+            <div key={mod.id} className={`admin-module-card${mod.unlocked ? ' admin-module-card--active' : ''}`}>
+              <div className="admin-module-card__header">
+                <span className="admin-module-card__name">{info.name}</span>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  {mod.pending_requests > 0 && (
+                    <span className="admin-module-card__requests" title={`${mod.pending_requests} solicitud(es) pendiente(s)`}>
+                      {mod.pending_requests}
+                    </span>
+                  )}
+                  <span className={`admin-badge${mod.unlocked ? ' admin-badge--success' : ''}`}>
+                    {mod.unlocked ? (mod.installed ? 'Instalado' : 'Desbloqueado') : 'Bloqueado'}
+                  </span>
+                </div>
+              </div>
+              <p className="admin-module-card__desc">{info.desc}</p>
+              <button
+                className={`admin-btn admin-btn--sm${mod.unlocked ? ' admin-btn--danger' : ' admin-btn--primary'}`}
+                onClick={() => handleToggle(mod)}
+                disabled={busy}
+              >
+                {busy ? '...' : mod.unlocked ? 'Revocar acceso' : 'Dar acceso'}
+              </button>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function AcmsSection({ companyId }) {
   const [acms, setAcms] = useState([])
   const [loading, setLoading] = useState(true)
@@ -352,6 +438,7 @@ export default function AdminCompanyDetail() {
 
       {error && <InlineNotice tone="error" title="No pudimos actualizar la empresa" description={error} className="notice--spaced" />}
 
+      <ModulesSection companyId={companyId} />
       <UsersSection companyId={companyId} />
       <AcmsSection companyId={companyId} />
     </div>

@@ -1,130 +1,28 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { deleteACM, listACMs, listEvents, listPendingApprovals, updateACM } from '../api.js'
-import { useAuth, useConfirm, useWizard } from '../App.jsx'
+import { useAuth } from '../contexts/AuthContext.jsx'
+import { useConfirm } from '../contexts/ConfirmContext.jsx'
+import { useWizard } from '../modules/acm-core/contexts/WizardContext.jsx'
+import { useModules } from '../framework/useModules.js'
 import { LoadingState, MobileWorkspaceLoading, StateCard } from '../components/StatusState.jsx'
+import { avatarColor, initials } from '../utils/avatars.js'
+import { ACM_STAGES } from '../constants/status.js'
+import {
+  statusLabel,
+  statusMeta,
+  stageProgress,
+  comparablesLabel,
+  greeting,
+  formatDate,
+  formatEventDate,
+  formatEventTime,
+  startOfHour,
+  isSameDay,
+} from './home/helpers.js'
+import DashboardPlaceholderStack from './home/DashboardPlaceholderStack.jsx'
 
-const COLUMNS = [
-  { key: 'nuevo', title: 'Nuevo', tone: 'blue' },
-  { key: 'en_progreso', title: 'En progreso', tone: 'violet' },
-  { key: 'finalizado', title: 'Finalizado', tone: 'green' },
-  { key: 'cancelado', title: 'Cancelado', tone: 'slate' },
-]
-
-function initials(name = '') {
-  return name.slice(0, 2).toUpperCase() || 'AC'
-}
-
-function avatarColor(seed = '') {
-  let hash = 0
-  for (const char of seed) hash = char.charCodeAt(0) + ((hash << 5) - hash)
-  const hue = Math.abs(hash) % 360
-  return `hsl(${hue}, 55%, 46%)`
-}
-
-function statusLabel(acm) {
-  if (!acm.requires_approval) return 'Sin aprobación'
-  return acm.approval_status || 'Pendiente'
-}
-
-function statusMeta(acm) {
-  const label = statusLabel(acm)
-  const normalized = String(label).toLowerCase()
-  if (normalized.includes('cambio')) {
-    return { label, tone: 'danger', hint: 'Requiere cambios antes de poder aprobarse.', dotLabel: 'Cambios solicitados' }
-  }
-  if (normalized.includes('aprob')) {
-    return { label, tone: 'success', hint: 'Tasacion aprobada y lista para continuar o exportar.', dotLabel: 'Aprobada' }
-  }
-  if (normalized.includes('pendiente')) {
-    return { label, tone: 'warning', hint: 'Pendiente de revision y aprobacion.', dotLabel: 'Pendiente' }
-  }
-  return { label, tone: 'neutral', hint: 'Esta tasacion no requiere aprobacion.', dotLabel: 'Sin aprobacion' }
-}
-
-function stageProgress(acm) {
-  const order = ['nuevo', 'en_progreso', 'finalizado', 'cancelado']
-  const index = order.indexOf(acm.stage || 'nuevo')
-  if (index <= 0) return 'Paso inicial'
-  if (index === 1) return 'Carga y ajuste en curso'
-  if (index === 2) return 'Lista para exportar'
-  return 'Flujo detenido'
-}
-
-function comparablesLabel(acm) {
-  const count = acm.cantidad_comparables || 0
-  return `${count} comparable${count === 1 ? '' : 's'}`
-}
-
-function greeting() {
-  const hour = new Date().getHours()
-  if (hour < 12) return 'Buenos días'
-  if (hour < 20) return 'Buenas tardes'
-  return 'Buenas noches'
-}
-
-function formatDate(value) {
-  return new Date(value).toLocaleDateString('es-AR')
-}
-
-function formatEventDate(value) {
-  return new Date(value).toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short' })
-}
-
-function formatEventTime(value, allDay) {
-  if (allDay) return 'Todo el día'
-  return new Date(value).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
-}
-
-function startOfHour(date) {
-  const next = new Date(date)
-  next.setMinutes(0, 0, 0)
-  return next
-}
-
-function DashboardPlaceholderStack({ variant = 'focus' }) {
-  const rows = variant === 'focus'
-    ? [
-        { title: 'Tasación Puerto Madero', meta: 'Carga y ajuste en curso', side: 'Pendiente', chips: ['3 comparables', 'Actualizado hoy'] },
-        { title: 'Tasación Palermo', meta: 'Documentación en revisión', side: 'En curso', chips: ['2 comparables', 'Seguimiento'] },
-      ]
-    : [
-        { title: 'Tasación Belgrano', meta: 'Analista senior · 4 comparables', side: 'Pendiente', chips: ['Revisión', 'Prioridad media'] },
-        { title: 'Tasación Núñez', meta: 'Broker interno · 2 comparables', side: 'Pendiente', chips: ['Cola', 'Siguiente'] },
-      ]
-
-  return (
-    <div className="dashboard-placeholder-stack" aria-hidden="true">
-      <div className="dashboard-placeholder-stack__rail">
-        {rows.map((row, index) => (
-          <div
-            key={`${variant}-${row.title}`}
-            className={`dashboard-placeholder-card${index === 1 ? ' is-secondary' : ''}`}
-          >
-            <div className="dashboard-placeholder-card__top">
-              <div className="dashboard-placeholder-card__copy">
-                <strong>{row.title}</strong>
-                <p>{row.meta}</p>
-              </div>
-              <span className="dashboard-placeholder-card__badge">{row.side}</span>
-            </div>
-            <div className="dashboard-placeholder-card__meta">
-              {row.chips.map((chip) => <span key={chip}>{chip}</span>)}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function isSameDay(dateA, dateB) {
-  return (
-    dateA.getFullYear() === dateB.getFullYear() &&
-    dateA.getMonth() === dateB.getMonth() &&
-    dateA.getDate() === dateB.getDate()
-  )
-}
+const COLUMNS = ACM_STAGES
 
 export default function Home() {
   const [acms, setAcms] = useState([])
@@ -141,6 +39,12 @@ export default function Home() {
     if (typeof window === 'undefined') return false
     return window.innerWidth <= 820
   })
+  const registry = useModules()
+  const hasACM = registry.isInstalled('acm-core')
+  const hasAgenda = registry.isInstalled('agenda')
+  const hasReviews = registry.isInstalled('acm-reviews')
+  const hasAnyModule = hasACM || hasAgenda || hasReviews
+
   const { dispatch } = useWizard()
   const { user, logout } = useAuth()
   const confirm = useConfirm()
@@ -149,15 +53,12 @@ export default function Home() {
   useEffect(() => {
     const now = new Date()
     const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
-    const fetches = [
-      listACMs().then(setAcms).catch((e) => setError(e.message)),
-      listEvents(now.toISOString(), nextWeek.toISOString()).then(setEvents).catch(() => {}),
-    ]
-    if (user?.is_approver) {
-      fetches.push(listPendingApprovals().then(setPendingApprovals).catch(() => {}))
-    }
+    const fetches = []
+    if (hasACM) fetches.push(listACMs().then(setAcms).catch((e) => setError(e.message)))
+    if (hasAgenda) fetches.push(listEvents(now.toISOString(), nextWeek.toISOString()).then(setEvents).catch(() => {}))
+    if (hasReviews && user?.is_approver) fetches.push(listPendingApprovals().then(setPendingApprovals).catch(() => {}))
     Promise.all(fetches).finally(() => setLoading(false))
-  }, [user?.is_approver])
+  }, [hasACM, hasAgenda, hasReviews, user?.is_approver])
 
   useEffect(() => {
     function handleResize() { setIsMobile(window.innerWidth <= 820) }
@@ -640,24 +541,45 @@ export default function Home() {
 
           {/* ── Desktop dashboard ─────────────────────────────────────── */}
           <section className="home-desktop-shell" aria-label="Dashboard">
+            {!hasAnyModule ? (
+              <div className="home-no-modules">
+                <div className="home-no-modules__inner">
+                  <span className="home-panel__eyebrow">Workspace</span>
+                  <h1 className="dashboard-greeting">{greeting()}{user?.username ? `, ${user.username}` : ''}</h1>
+                  <p className="home-no-modules__copy">
+                    Tu workspace todavía no tiene ninguna aplicación instalada.
+                    Instalá módulos desde el App Store para empezar a usar las funciones de la plataforma.
+                  </p>
+                  {user?.is_admin && (
+                    <button type="button" className="btn btn-primary" onClick={() => navigate('/apps')}>
+                      Ir al App Store →
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : (<>
             <header className="dashboard-hero">
               <div className="dashboard-hero__copy">
                 <span className="home-panel__eyebrow">Dashboard</span>
                 <h1 className="dashboard-greeting">{greeting()}{user?.username ? `, ${user.username}` : ''}</h1>
                 <p>
-                  {desktopOverview.total > 0
+                  {hasACM && desktopOverview.total > 0
                     ? `Tenés ${desktopOverview.inFlight} tasaciones activas, ${stageCounts.finalizado} finalizadas y ${desktopOverview.approvalQueue} en revisión.`
-                    : 'Todavía no hay tasaciones cargadas. Podés crear la primera y empezar el flujo desde acá.'}
+                    : hasACM ? 'Todavía no hay tasaciones cargadas. Podés crear la primera y empezar el flujo desde acá.' : 'Bienvenido a tu workspace.'}
                 </p>
               </div>
 
               <div className="dashboard-hero__actions">
-                <button type="button" className="btn btn-primary" onClick={handleNew}>
-                  + Nueva tasación
-                </button>
-                <button type="button" className="dashboard-secondary-btn" onClick={() => navigate('/pipeline')}>
-                  Ver pipeline
-                </button>
+                {hasACM && (
+                  <button type="button" className="btn btn-primary" onClick={handleNew}>
+                    + Nueva tasación
+                  </button>
+                )}
+                {hasACM && (
+                  <button type="button" className="dashboard-secondary-btn" onClick={() => navigate('/pipeline')}>
+                    Ver pipeline
+                  </button>
+                )}
               </div>
 
               <div className="dashboard-overview-grid">
@@ -678,9 +600,8 @@ export default function Home() {
                 </article>
               </div>
             </header>
-
             <div className="dashboard-grid">
-              <section className="dashboard-calendar-card">
+              {hasAgenda && <section className="dashboard-calendar-card">
                 <div className="dashboard-calendar-card__date">
                   <strong>{todayAgenda.dateLabel}</strong>
                   <span>{todayAgenda.weekdayLabel}</span>
@@ -724,10 +645,10 @@ export default function Home() {
                     </div>
                   </div>
                 </div>
-              </section>
+              </section>}
 
               <div className="dashboard-grid__split">
-                <section className="dashboard-panel dashboard-panel--focus">
+                {hasACM && <section className="dashboard-panel dashboard-panel--focus">
                   <div className="dashboard-panel__header">
                     <div>
                       <span className="home-panel__eyebrow">En foco</span>
@@ -760,13 +681,13 @@ export default function Home() {
                   ) : (
                     <DashboardPlaceholderStack variant="focus" />
                   )}
-                </section>
+                </section>}
 
-                <section className="dashboard-panel">
+                {(hasACM || (hasReviews && user?.is_approver)) && <section className="dashboard-panel">
                   <div className="dashboard-panel__header">
                     <div>
-                      <span className="home-panel__eyebrow">{user?.is_approver ? 'Revisiones' : 'Actividad'}</span>
-                      <strong>{user?.is_approver ? 'Cola de aprobaciones' : 'Últimas tasaciones actualizadas'}</strong>
+                      <span className="home-panel__eyebrow">{user?.is_approver && hasReviews ? 'Revisiones' : 'Actividad'}</span>
+                      <strong>{user?.is_approver && hasReviews ? 'Cola de aprobaciones' : 'Últimas tasaciones actualizadas'}</strong>
                     </div>
                     <button
                       type="button"
@@ -802,9 +723,10 @@ export default function Home() {
                   ) : (
                     <DashboardPlaceholderStack variant="review" />
                   )}
-                </section>
+                </section>}
               </div>
             </div>
+            </>)}
           </section>
         </>
       )}

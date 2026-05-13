@@ -59,3 +59,10 @@ export const adminListAcms = (companyId) => adminRequest('GET', `/api/admin/comp
 export const adminGetIntegrationSettings = () => adminRequest('GET', '/api/admin/settings/integrations')
 export const adminUpdateIntegrationSettings = (data) => adminRequest('PUT', '/api/admin/settings/integrations', data)
 export const adminCheckIntegrationStatus = () => adminRequest('GET', '/api/admin/settings/integrations/status')
+
+export const adminListCompanyModules = (companyId) => adminRequest('GET', `/api/admin/companies/${companyId}/modules`)
+export const adminUnlockModule = (companyId, moduleId) => adminRequest('POST', `/api/admin/companies/${companyId}/modules/${moduleId}/unlock`)
+export const adminLockModule = (companyId, moduleId) => adminRequest('DELETE', `/api/admin/companies/${companyId}/modules/${moduleId}/unlock`)
+
+export const adminGetCalendarSettings = () => adminRequest('GET', '/api/admin/settings/calendar')
+export const adminUpdateCalendarSettings = (data) => adminRequest('PUT', '/api/admin/settings/calendar', data)
