@@ -1,116 +1,27 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { deleteACM, listACMs, listEvents, listPendingApprovals, updateACM } from '../api.js'
-import { useAuth, useConfirm, useWizard } from '../App.jsx'
+import { useAuth } from '../contexts/AuthContext.jsx'
+import { useConfirm } from '../contexts/ConfirmContext.jsx'
+import { useWizard } from '../modules/acm-core/contexts/WizardContext.jsx'
 import { LoadingState, MobileWorkspaceLoading, StateCard } from '../components/StatusState.jsx'
 import { avatarColor, initials } from '../utils/avatars.js'
 import { ACM_STAGES } from '../constants/status.js'
+import {
+  statusLabel,
+  statusMeta,
+  stageProgress,
+  comparablesLabel,
+  greeting,
+  formatDate,
+  formatEventDate,
+  formatEventTime,
+  startOfHour,
+  isSameDay,
+} from './home/helpers.js'
+import DashboardPlaceholderStack from './home/DashboardPlaceholderStack.jsx'
 
 const COLUMNS = ACM_STAGES
-
-function statusLabel(acm) {
-  if (!acm.requires_approval) return 'Sin aprobación'
-  return acm.approval_status || 'Pendiente'
-}
-
-function statusMeta(acm) {
-  const label = statusLabel(acm)
-  const normalized = String(label).toLowerCase()
-  if (normalized.includes('cambio')) {
-    return { label, tone: 'danger', hint: 'Requiere cambios antes de poder aprobarse.', dotLabel: 'Cambios solicitados' }
-  }
-  if (normalized.includes('aprob')) {
-    return { label, tone: 'success', hint: 'Tasacion aprobada y lista para continuar o exportar.', dotLabel: 'Aprobada' }
-  }
-  if (normalized.includes('pendiente')) {
-    return { label, tone: 'warning', hint: 'Pendiente de revision y aprobacion.', dotLabel: 'Pendiente' }
-  }
-  return { label, tone: 'neutral', hint: 'Esta tasacion no requiere aprobacion.', dotLabel: 'Sin aprobacion' }
-}
-
-function stageProgress(acm) {
-  const order = ['nuevo', 'en_progreso', 'finalizado', 'cancelado']
-  const index = order.indexOf(acm.stage || 'nuevo')
-  if (index <= 0) return 'Paso inicial'
-  if (index === 1) return 'Carga y ajuste en curso'
-  if (index === 2) return 'Lista para exportar'
-  return 'Flujo detenido'
-}
-
-function comparablesLabel(acm) {
-  const count = acm.cantidad_comparables || 0
-  return `${count} comparable${count === 1 ? '' : 's'}`
-}
-
-function greeting() {
-  const hour = new Date().getHours()
-  if (hour < 12) return 'Buenos días'
-  if (hour < 20) return 'Buenas tardes'
-  return 'Buenas noches'
-}
-
-function formatDate(value) {
-  return new Date(value).toLocaleDateString('es-AR')
-}
-
-function formatEventDate(value) {
-  return new Date(value).toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short' })
-}
-
-function formatEventTime(value, allDay) {
-  if (allDay) return 'Todo el día'
-  return new Date(value).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
-}
-
-function startOfHour(date) {
-  const next = new Date(date)
-  next.setMinutes(0, 0, 0)
-  return next
-}
-
-function DashboardPlaceholderStack({ variant = 'focus' }) {
-  const rows = variant === 'focus'
-    ? [
-        { title: 'Tasación Puerto Madero', meta: 'Carga y ajuste en curso', side: 'Pendiente', chips: ['3 comparables', 'Actualizado hoy'] },
-        { title: 'Tasación Palermo', meta: 'Documentación en revisión', side: 'En curso', chips: ['2 comparables', 'Seguimiento'] },
-      ]
-    : [
-        { title: 'Tasación Belgrano', meta: 'Analista senior · 4 comparables', side: 'Pendiente', chips: ['Revisión', 'Prioridad media'] },
-        { title: 'Tasación Núñez', meta: 'Broker interno · 2 comparables', side: 'Pendiente', chips: ['Cola', 'Siguiente'] },
-      ]
-
-  return (
-    <div className="dashboard-placeholder-stack" aria-hidden="true">
-      <div className="dashboard-placeholder-stack__rail">
-        {rows.map((row, index) => (
-          <div
-            key={`${variant}-${row.title}`}
-            className={`dashboard-placeholder-card${index === 1 ? ' is-secondary' : ''}`}
-          >
-            <div className="dashboard-placeholder-card__top">
-              <div className="dashboard-placeholder-card__copy">
-                <strong>{row.title}</strong>
-                <p>{row.meta}</p>
-              </div>
-              <span className="dashboard-placeholder-card__badge">{row.side}</span>
-            </div>
-            <div className="dashboard-placeholder-card__meta">
-              {row.chips.map((chip) => <span key={chip}>{chip}</span>)}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function isSameDay(dateA, dateB) {
-  return (
-    dateA.getFullYear() === dateB.getFullYear() &&
-    dateA.getMonth() === dateB.getMonth() &&
-    dateA.getDate() === dateB.getDate()
-  )
-}
 
 export default function Home() {
   const [acms, setAcms] = useState([])

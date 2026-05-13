@@ -11967,3 +11967,237 @@ body::before {
 .pipeline-board {
   min-height: 60vh;
 }
+
+/* ── App Store ─────────────────────────────────────────────────────────────── */
+
+.appstore {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 32px 24px 64px;
+}
+
+.appstore__header {
+  margin-bottom: 32px;
+}
+
+.appstore__title {
+  margin: 0 0 6px;
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.02em;
+}
+
+.appstore__subtitle {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 15px;
+}
+
+.appstore__feedback {
+  padding: 12px 18px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 20px;
+}
+
+.appstore__feedback--success {
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+
+.appstore__feedback--error {
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+.appstore__section {
+  margin-bottom: 36px;
+}
+
+.appstore__section-title {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-soft);
+  margin: 0 0 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.appstore__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.appstore-card {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: var(--shadow-card);
+  transition: box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.appstore-card:hover {
+  box-shadow: var(--shadow-soft);
+  transform: translateY(-1px);
+}
+
+.appstore-card.is-installed {
+  border-color: rgba(63, 91, 216, 0.25);
+  background: linear-gradient(135deg, #fff 70%, rgba(63, 91, 216, 0.03));
+}
+
+.appstore-card.is-locked {
+  opacity: 0.78;
+}
+
+.appstore-card__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.appstore-card__icon-wrap {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--primary-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.appstore-card__icon {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--primary);
+}
+
+.appstore-card__meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.appstore-card__name {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.appstore-card__version {
+  font-size: 11px;
+  color: var(--text-soft);
+}
+
+.appstore-card__badge {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 20px;
+}
+
+.appstore-card__badge--installed {
+  background: #ecfdf5;
+  color: #065f46;
+}
+
+.appstore-card__badge--unlocked {
+  background: #eff6ff;
+  color: #1e40af;
+}
+
+.appstore-card__badge--locked {
+  background: #f8fafc;
+  color: #94a3b8;
+  border: 1px solid #e2e8f0;
+}
+
+.appstore-card__desc {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-soft);
+  line-height: 1.55;
+}
+
+.appstore-card__deps {
+  font-size: 11px;
+  color: var(--text-soft);
+  background: #f8fafc;
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+
+.appstore-card__deps-label {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.appstore-card__actions {
+  margin-top: 4px;
+}
+
+.appstore-card__actions .btn--sm {
+  min-height: 32px;
+  padding: 0 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: background 0.14s ease, transform 0.12s ease;
+}
+
+.appstore-card__actions .btn--sm:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.appstore-card__actions .btn--sm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.appstore-card__actions .btn--primary {
+  background: linear-gradient(135deg, var(--primary), #6d7cff);
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(var(--primary-rgb), 0.28);
+}
+
+.appstore-card__actions .btn--primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, var(--primary-dark), #5b68f6);
+}
+
+.appstore-card__actions .btn--ghost {
+  background: #f1f5f9;
+  color: var(--text-soft);
+}
+
+.appstore-card__actions .btn--ghost:hover:not(:disabled) {
+  background: #e2e8f0;
+  color: var(--text);
+}
+
+.appstore-card__actions .btn--danger-ghost {
+  background: #fff1f2;
+  color: #be123c;
+}
+
+.appstore-card__actions .btn--danger-ghost:hover:not(:disabled) {
+  background: #ffe4e6;
+}
